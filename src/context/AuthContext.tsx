@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useMemo } from 'react';
 import { ClerkProvider, useUser, useAuth, useClerk } from '@clerk/clerk-react';
 import { User, UserDashboardStats } from '../types';
 
@@ -214,10 +214,14 @@ const ClerkAuthBridge: React.FC<{
   }, [isSignedIn, getToken]);
 
   const syncWithDatabase = useCallback(async () => {
-    const token = await getAuthToken();
-    if (!token) {
+    if (!isSignedIn) {
       setDbUser(defaultGuestUser);
       setUserStats(null);
+      return;
+    }
+
+    const token = await getAuthToken();
+    if (!token) {
       return;
     }
 
@@ -261,19 +265,21 @@ const ClerkAuthBridge: React.FC<{
           setUserStats(stats);
         }
       } else {
-        setDbUser(defaultGuestUser);
-        setUserStats(null);
+        console.warn('[Auth Sync] /api/auth/me returned status:', res.status);
       }
     } catch (err) {
       console.warn('[Auth Sync] Error syncing user with database:', err);
     } finally {
       setIsSyncing(false);
     }
-  }, [getAuthToken, clerkUser]);
+  }, [getAuthToken, clerkUser, isSignedIn]);
 
   useEffect(() => {
-    if (isClerkUserLoaded) {
+    if (isClerkUserLoaded && isSignedIn) {
       syncWithDatabase();
+    } else if (isClerkUserLoaded && !isSignedIn) {
+      setDbUser(defaultGuestUser);
+      setUserStats(null);
     }
   }, [isClerkUserLoaded, isSignedIn, clerkUser?.id, syncWithDatabase]);
 
@@ -375,13 +381,50 @@ const ClerkAuthBridge: React.FC<{
     window.location.reload();
   };
 
-  const isUserAuthenticated = Boolean(isSignedIn && dbUser.isLoggedIn);
+  // Derive effective user immediately from Clerk user + synced SQLite database user
+  const effectiveUser: User = useMemo(() => {
+    if (!isSignedIn) {
+      return defaultGuestUser;
+    }
+
+    const primaryEmail = clerkUser?.primaryEmailAddress?.emailAddress || '';
+    const fallbackUsername = clerkUser?.username || (primaryEmail ? primaryEmail.split('@')[0] : 'Analyst');
+    const resolvedUsername = 
+      dbUser.isLoggedIn && dbUser.username && dbUser.username !== 'Guest Analyst'
+        ? dbUser.username
+        : fallbackUsername;
+
+    const isAdmin = 
+      (dbUser.role || '').toLowerCase() === 'admin' ||
+      resolvedUsername.toLowerCase() === 'admin' ||
+      clerkUser?.username?.toLowerCase() === 'admin';
+
+    return {
+      id: dbUser.isLoggedIn ? dbUser.id : (clerkUser?.id || 'usr-temp'),
+      clerkUserId: clerkUser?.id || dbUser.clerkUserId,
+      username: resolvedUsername,
+      firstName: dbUser.firstName || clerkUser?.firstName || '',
+      lastName: dbUser.lastName || clerkUser?.lastName || '',
+      email: dbUser.email || primaryEmail,
+      dateOfBirth: dbUser.dateOfBirth || '',
+      profileImage: dbUser.profileImage || clerkUser?.imageUrl,
+      role: isAdmin ? 'Admin' : (dbUser.role && dbUser.role !== 'Guest' ? dbUser.role : 'Free User'),
+      isLoggedIn: true,
+      accountStatus: 'Active',
+      verificationStatus: true,
+      createdAt: dbUser.createdAt || (clerkUser?.createdAt ? new Date(clerkUser.createdAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]),
+      lastLogin: dbUser.lastActive || new Date().toISOString(),
+      lastActive: dbUser.lastActive || new Date().toISOString(),
+    };
+  }, [isSignedIn, clerkUser, dbUser]);
+
+  const isUserAuthenticated = Boolean(isSignedIn);
 
   return (
     <AuthContext.Provider
       value={{
-        user: dbUser,
-        dbUser,
+        user: effectiveUser,
+        dbUser: effectiveUser,
         isLoggedIn: isUserAuthenticated,
         isLoaded: isClerkUserLoaded && !isSyncing,
         isClerkConfigured: true,

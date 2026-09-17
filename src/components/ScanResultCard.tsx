@@ -18,7 +18,8 @@ import {
   FileText, 
   Check,
   Share2,
-  Fingerprint
+  Fingerprint,
+  Database
 } from 'lucide-react';
 import { URLScanResult } from '../types';
 import { generatePDFReport } from '../utils/pdfExport';
@@ -153,6 +154,12 @@ export const ScanResultCard: React.FC<ScanResultCardProps> = ({ result, onScanNe
                 <span className="text-slate-400 flex items-center gap-1">
                   <Clock className="w-3 h-3 text-slate-400" /> {result.scanTime}
                 </span>
+                {result.scannedBy && (
+                  <span className="text-emerald-400 bg-emerald-950/40 border border-emerald-500/30 px-2 py-0.5 rounded flex items-center gap-1">
+                    <Database className="w-3 h-3 text-emerald-400" />
+                    <span>@{result.scannedBy}</span>
+                  </span>
+                )}
               </div>
 
               <h1 className="text-2xl sm:text-3xl font-bold text-slate-100 tracking-tight">

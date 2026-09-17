@@ -140,6 +140,7 @@ export default function App() {
           const saved = await res.json();
           // Update record with server generated ID if provided
           if (saved && saved.id) {
+            setCurrentScan(saved);
             setScanHistory(prev => prev.map(s => s.id === result.id ? saved : s));
           }
         }
@@ -278,7 +279,12 @@ export default function App() {
 
           {activeTab === 'dataset' && (
             <PageTransition key="dataset">
-              <DatasetViewer />
+              <DatasetViewer 
+                userScans={scanHistory}
+                currentUser={currentUser}
+                onSelectScan={handleSelectScanFromDashboard}
+                onOpenLogin={handleOpenAuth}
+              />
             </PageTransition>
           )}
         </AnimatePresence>

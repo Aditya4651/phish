@@ -285,13 +285,15 @@ export async function getUserScansForAdmin(userId: number): Promise<any[]> {
 
   return result.rows.map((row: any) => {
     try {
-      const parsed = JSON.parse(String(row.result));
+      const rawData = String(row.detected_threats || '{}');
+      const parsed = JSON.parse(rawData);
       return {
         ...parsed,
         id: String(row.id),
         url: String(row.url),
         riskScore: Number(row.risk_score),
         timestamp: String(row.created_at),
+        label: row.result || parsed.label,
       };
     } catch {
       return {

@@ -22,7 +22,8 @@ export const ClerkAuthModal: React.FC<ClerkAuthModalProps> = ({
 }) => {
   const { 
     clerkKeyStatus,
-    saveCustomClerkKey 
+    saveCustomClerkKey,
+    isLoggedIn 
   } = useAppAuth();
 
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>(initialMode);
@@ -33,6 +34,13 @@ export const ClerkAuthModal: React.FC<ClerkAuthModalProps> = ({
     setAuthMode(initialMode);
     setErrorMessage(null);
   }, [initialMode, isOpen]);
+
+  // Close modal when sign-in or registration succeeds
+  useEffect(() => {
+    if (isLoggedIn && isOpen) {
+      onClose();
+    }
+  }, [isLoggedIn, isOpen, onClose]);
 
   if (!isOpen) return null;
 

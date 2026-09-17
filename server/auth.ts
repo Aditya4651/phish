@@ -32,6 +32,8 @@ export interface AuthenticatedClerkIdentity {
  * Fails closed: Only valid Clerk session tokens verified by Clerk are accepted.
  * Local JWT bypasses, mock fallbacks, and custom token signing are completely eliminated.
  */
+const userDetailsCache = new Map<string, { identity: AuthenticatedClerkIdentity; expiresAt: number }>();
+
 export async function getAuthenticatedUser(req: Request): Promise<AuthenticatedClerkIdentity | null> {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -55,6 +57,11 @@ export async function getAuthenticatedUser(req: Request): Promise<AuthenticatedC
       return null;
     }
 
+    const cached = userDetailsCache.get(clerkUserId);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.identity;
+    }
+
     const clerk = getClerkClient();
     if (clerk) {
       try {
@@ -63,7 +70,7 @@ export async function getAuthenticatedUser(req: Request): Promise<AuthenticatedC
           || user.emailAddresses?.[0]?.emailAddress 
           || null;
 
-        return {
+        const resolvedIdentity: AuthenticatedClerkIdentity = {
           clerkUserId: user.id,
           email: primaryEmail,
           firstName: user.firstName || null,
@@ -71,12 +78,19 @@ export async function getAuthenticatedUser(req: Request): Promise<AuthenticatedC
           username: user.username || (primaryEmail ? primaryEmail.split('@')[0] : 'Analyst'),
           profileImageUrl: user.imageUrl || null,
         };
+
+        userDetailsCache.set(clerkUserId, {
+          identity: resolvedIdentity,
+          expiresAt: Date.now() + 120_000 // 2 minutes cache
+        });
+
+        return resolvedIdentity;
       } catch (userFetchErr) {
         console.warn('[Clerk Auth] User details fetch notice:', userFetchErr);
       }
     }
 
-    return {
+    const fallbackIdentity: AuthenticatedClerkIdentity = {
       clerkUserId,
       email: (decoded as any).email || null,
       firstName: (decoded as any).first_name || null,
@@ -84,7 +98,10 @@ export async function getAuthenticatedUser(req: Request): Promise<AuthenticatedC
       username: (decoded as any).username || 'Analyst',
       profileImageUrl: (decoded as any).image_url || null,
     };
-  } catch {
+
+    return fallbackIdentity;
+  } catch (err: any) {
+    console.error('[Clerk Auth Verification Error]:', err?.message || err);
     // Fails closed if token cannot be verified with Clerk
     return null;
   }
