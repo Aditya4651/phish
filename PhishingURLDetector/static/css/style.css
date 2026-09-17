@@ -1,0 +1,85 @@
+/* Phishing URL Detector Cybersecurity Styling */
+
+:root {
+    --cyber-dark: #0a0f1d;
+    --cyber-card-bg: #11192e;
+    --cyber-cyan: #00f0ff;
+    --cyber-green: #00ff9d;
+    --cyber-red: #ff3b5c;
+    --cyber-yellow: #ffb800;
+}
+
+body {
+    background-color: var(--cyber-dark) !important;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+.bg-cyber {
+    background-color: #0d1424 !important;
+}
+
+.cyber-card {
+    background-color: var(--cyber-card-bg) !important;
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.cyber-card:hover {
+    box-shadow: 0 12px 32px rgba(0, 240, 255, 0.15);
+}
+
+.border-cyan {
+    border-color: var(--cyber-cyan) !important;
+}
+
+.text-cyan {
+    color: var(--cyber-cyan) !important;
+}
+
+.btn-cyan {
+    background-color: var(--cyber-cyan);
+    color: #000;
+    border: none;
+}
+
+.btn-cyan:hover {
+    background-color: #00c8d6;
+    color: #000;
+}
+
+.btn-outline-cyan {
+    color: var(--cyber-cyan);
+    border-color: var(--cyber-cyan);
+}
+
+.btn-outline-cyan:hover {
+    background-color: var(--cyber-cyan);
+    color: #000;
+}
+
+.glow-title {
+    text-shadow: 0 0 20px rgba(0, 240, 255, 0.3);
+}
+
+.cyber-btn {
+    box-shadow: 0 0 15px rgba(0, 255, 157, 0.2);
+    transition: all 0.3s ease;
+}
+
+.cyber-btn:hover {
+    box-shadow: 0 0 25px rgba(0, 255, 157, 0.5);
+    transform: translateY(-2px);
+}
+
+.max-w-700 {
+    max-width: 700px;
+}
+
+.max-w-450 {
+    max-width: 450px;
+}
+
+.placeholder-muted::placeholder {
+    color: #6c757d;
+}
