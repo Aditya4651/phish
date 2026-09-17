@@ -6,7 +6,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from predict import predict_url
 
 app = Flask(__name__)
-app.secret_key = 'super_secret_cybersecurity_key_2026'
+app.secret_key = os.environ.get('FLASK_SECRET_KEY') or os.urandom(32).hex()
 
 DATABASE = os.path.join(os.path.dirname(__file__), 'database', 'phishing.db')
 SCHEMA = os.path.join(os.path.dirname(__file__), 'database', 'schema.sql')
@@ -88,7 +88,7 @@ def login():
         user = conn.execute('SELECT * FROM users WHERE username = ?', (username,)).fetchone()
         conn.close()
 
-        if user and (check_password_hash(user['password'], password) or password == 'admin123'):
+        if user and check_password_hash(user['password'], password):
             session['user_id'] = user['id']
             session['username'] = user['username']
             flash("Successfully logged in!", "success")
@@ -110,14 +110,15 @@ def dashboard():
         flash("Please log in to view dashboard", "warning")
         return redirect(url_for('login'))
 
+    user_id = session['user_id']
     conn = get_db()
-    # Fetch scans for this user
-    scans = conn.execute('SELECT * FROM reports ORDER BY date DESC LIMIT 50').fetchall()
+    # Fetch scans strictly for this authenticated user (prevents IDOR)
+    scans = conn.execute('SELECT * FROM reports WHERE user_id = ? ORDER BY date DESC LIMIT 50', (user_id,)).fetchall()
 
-    total_scans = conn.execute('SELECT COUNT(*) FROM reports').fetchone()[0]
-    phishing_scans = conn.execute('SELECT COUNT(*) FROM reports WHERE prediction = 1').fetchone()[0]
-    safe_scans = conn.execute('SELECT COUNT(*) FROM reports WHERE prediction = 0').fetchone()[0]
-    avg_risk = conn.execute('SELECT AVG(risk_score) FROM reports').fetchone()[0] or 0.0
+    total_scans = conn.execute('SELECT COUNT(*) FROM reports WHERE user_id = ?', (user_id,)).fetchone()[0]
+    phishing_scans = conn.execute('SELECT COUNT(*) FROM reports WHERE user_id = ? AND prediction = 1', (user_id,)).fetchone()[0]
+    safe_scans = conn.execute('SELECT COUNT(*) FROM reports WHERE user_id = ? AND prediction = 0', (user_id,)).fetchone()[0]
+    avg_risk = conn.execute('SELECT AVG(risk_score) FROM reports WHERE user_id = ?', (user_id,)).fetchone()[0] or 0.0
 
     conn.close()
 

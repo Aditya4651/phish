@@ -63,7 +63,5 @@ http://127.0.0.1:5000
 
 ---
 
-## 🔐 Credentials for Dashboard
-
-- **Username:** `admin`
-- **Password:** `admin123`
+## 🔐 Dashboard Access
+Create an account or use your configured administrative credentials in SQLite users table.

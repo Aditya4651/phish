@@ -42,6 +42,13 @@ export async function initDatabase(): Promise<void> {
     // Column already exists
   }
 
+  // Migrate api_key column if missing
+  try {
+    await db.execute("ALTER TABLE users ADD COLUMN api_key TEXT;");
+  } catch {
+    // Column already exists
+  }
+
   // Ensure known admin username has admin role
   try {
     await db.execute({

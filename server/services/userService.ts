@@ -150,6 +150,7 @@ export async function updateUserProfile(
     username?: string;
     dateOfBirth?: string;
     profileImageUrl?: string;
+    apiKey?: string;
   }
 ): Promise<UserRow> {
   const now = new Date().toISOString();
@@ -179,6 +180,7 @@ export async function updateUserProfile(
         username = COALESCE(?, username),
         date_of_birth = COALESCE(?, date_of_birth),
         profile_image_url = COALESCE(?, profile_image_url),
+        api_key = COALESCE(?, api_key),
         updated_at = ?
       WHERE id = ?;
     `,
@@ -188,6 +190,7 @@ export async function updateUserProfile(
       updates.username ?? null,
       updates.dateOfBirth ?? null,
       updates.profileImageUrl ?? null,
+      updates.apiKey ?? null,
       now,
       userId,
     ],

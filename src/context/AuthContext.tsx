@@ -2,17 +2,19 @@ import React, { createContext, useContext, useState, useEffect, ReactNode, useCa
 import { ClerkProvider, useUser, useAuth, useClerk } from '@clerk/clerk-react';
 import { User, UserDashboardStats } from '../types';
 
+const DEFAULT_CLERK_KEY = 'pk_test_c2F2ZWQtZm93bC0xNjI3LmNsZXJrLmFjY291bnRzLmRldiQ';
+
 const RAW_CLERK_KEY = 
   (typeof window !== 'undefined' && localStorage.getItem('phishguard_clerk_pub_key')) ||
   import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || 
   import.meta.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || 
-  '';
+  DEFAULT_CLERK_KEY;
 
 export function isLiveClerkKey(key?: string | null): boolean {
   if (!key || typeof key !== 'string') return false;
   const trimmed = key.trim();
   if (!trimmed.startsWith('pk_test_') && !trimmed.startsWith('pk_live_')) return false;
-  // Check for the known dead/deleted dummy test key that returns 404 from Clerk
+  // Reject dummy placeholder key
   if (trimmed === 'pk_test_aW50ZW50LWhlcm1pdC0yNzUyLmNsZXJrLmFjY291bnRzLmRldiQ') return false;
   try {
     const raw = trimmed.replace(/^pk_(test|live)_/, '');
@@ -89,9 +91,9 @@ const AuthContext = createContext<AuthContextType>({
   getAuthToken: async () => null,
   refreshUserProfile: async () => {},
   updateUserProfile: async () => ({ success: false, error: 'Not configured' }),
-  loginWithCredentials: async () => ({ success: false, error: 'Not configured' }),
-  loginWithGoogle: async () => ({ success: false, error: 'Not configured' }),
-  registerAccount: async () => ({ success: false, error: 'Not configured' }),
+  loginWithCredentials: async () => ({ success: false, error: 'Clerk authentication required.' }),
+  loginWithGoogle: async () => ({ success: false, error: 'Clerk authentication required.' }),
+  registerAccount: async () => ({ success: false, error: 'Clerk authentication required.' }),
   saveCustomClerkKey: () => {},
   isAuthModalOpen: false,
   openSignIn: () => {},
@@ -103,7 +105,8 @@ const AuthContext = createContext<AuthContextType>({
 export const useAppAuth = () => useContext(AuthContext);
 
 /**
- * Direct Authentication Bridge (Active when Clerk is not configured or for direct analyst login)
+ * Guest / Setup Bridge: Active when Clerk publishable key is not yet configured in env.
+ * Enforces fail-closed behavior: no forged JWTs or bypass credentials are generated.
  */
 const DirectAuthBridge: React.FC<{
   children: ReactNode;
@@ -111,197 +114,16 @@ const DirectAuthBridge: React.FC<{
   isModalOpen: boolean;
   setIsModalOpen: (open: boolean) => void;
 }> = ({ children, clerkKeyStatus, isModalOpen, setIsModalOpen }) => {
-  const [user, setUser] = useState<User>(defaultGuestUser);
-  const [dbUser, setDbUser] = useState<User>(defaultGuestUser);
-  const [userStats, setUserStats] = useState<UserDashboardStats | null>(null);
-  const [isLoaded, setIsLoaded] = useState(false);
+  const [user] = useState<User>(defaultGuestUser);
+  const [userStats] = useState<UserDashboardStats | null>(null);
 
-  // Helper to fetch session token from localStorage
   const getAuthToken = useCallback(async (): Promise<string | null> => {
-    return localStorage.getItem('phishguard_auth_token');
+    return null; // Fails closed: no custom/forged tokens issued
   }, []);
 
-  // Sync current user profile from server
   const syncWithDatabase = useCallback(async () => {
-    const token = localStorage.getItem('phishguard_auth_token');
-    if (!token) {
-      setUser(defaultGuestUser);
-      setDbUser(defaultGuestUser);
-      setUserStats(null);
-      setIsLoaded(true);
-      return;
-    }
-
-    try {
-      const res = await fetch('/api/auth/me', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        const serverUser = data.user;
-        const stats = data.stats;
-
-        const effectiveEmail = (serverUser.email || '').toLowerCase();
-        const isAdmin = 
-          (serverUser.role || '').toLowerCase() === 'admin' ||
-          serverUser.username === 'admin';
-
-        const unifiedUser: User = {
-          id: String(serverUser.id),
-          username: serverUser.username || 'Analyst',
-          firstName: serverUser.first_name || '',
-          lastName: serverUser.last_name || '',
-          email: serverUser.email || '',
-          dateOfBirth: serverUser.date_of_birth || '',
-          profileImage: serverUser.profile_image_url || (isAdmin ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=250' : undefined),
-          role: isAdmin ? 'Admin' : 'Free User',
-          isLoggedIn: true,
-          accountStatus: 'Active',
-          verificationStatus: true,
-          createdAt: serverUser.created_at ? serverUser.created_at.split('T')[0] : new Date().toISOString().split('T')[0],
-          lastLogin: serverUser.last_active_at || new Date().toISOString(),
-          lastActive: serverUser.last_active_at || new Date().toISOString(),
-        };
-
-        setUser(unifiedUser);
-        setDbUser(unifiedUser);
-
-        if (stats) {
-          setUserStats(stats);
-        }
-      } else {
-        localStorage.removeItem('phishguard_auth_token');
-        setUser(defaultGuestUser);
-        setDbUser(defaultGuestUser);
-      }
-    } catch (err) {
-      console.warn('[Direct Auth Sync] Error syncing user:', err);
-    } finally {
-      setIsLoaded(true);
-    }
+    // Unauthenticated guest mode
   }, []);
-
-  useEffect(() => {
-    syncWithDatabase();
-  }, [syncWithDatabase]);
-
-  const loginWithCredentials = async (username: string, password: string): Promise<{ success: boolean; error?: string }> => {
-    try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        return { success: false, error: data.error || 'Authentication failed' };
-      }
-
-      localStorage.setItem('phishguard_auth_token', data.token);
-      await syncWithDatabase();
-      setIsModalOpen(false);
-      return { success: true };
-    } catch (err: any) {
-      return { success: false, error: err.message || 'Network error during login.' };
-    }
-  };
-
-  const loginWithGoogle = async (email?: string, name?: string): Promise<{ success: boolean; error?: string }> => {
-    try {
-      const res = await fetch('/api/auth/google/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: email || 'analyst@phishguard.security',
-          name: name || 'Security Analyst',
-          googleId: 'g-analyst-sso',
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        return { success: false, error: data.error || 'Google login failed' };
-      }
-
-      localStorage.setItem('phishguard_auth_token', data.token);
-      await syncWithDatabase();
-      setIsModalOpen(false);
-      return { success: true };
-    } catch (err: any) {
-      return { success: false, error: err.message || 'Network error during Google login.' };
-    }
-  };
-
-  const registerAccount = async (payload: {
-    username: string;
-    email: string;
-    password: string;
-    firstName?: string;
-    lastName?: string;
-  }): Promise<{ success: boolean; error?: string }> => {
-    try {
-      const res = await fetch('/api/auth/direct-register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        return { success: false, error: data.error || 'Registration failed' };
-      }
-
-      localStorage.setItem('phishguard_auth_token', data.token);
-      await syncWithDatabase();
-      setIsModalOpen(false);
-      return { success: true };
-    } catch (err: any) {
-      return { success: false, error: err.message || 'Network error during registration.' };
-    }
-  };
-
-  const updateUserProfile = async (updates: {
-    firstName?: string;
-    lastName?: string;
-    username?: string;
-    dateOfBirth?: string;
-    profileImageUrl?: string;
-  }): Promise<{ success: boolean; error?: string }> => {
-    const token = localStorage.getItem('phishguard_auth_token');
-    if (!token) return { success: false, error: 'User is not authenticated.' };
-
-    try {
-      const response = await fetch('/api/user/profile', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(updates),
-      });
-
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        return { success: false, error: errData.error || 'Failed to update profile.' };
-      }
-
-      await syncWithDatabase();
-      return { success: true };
-    } catch (err: any) {
-      return { success: false, error: err?.message || 'Network error updating profile.' };
-    }
-  };
-
-  const handleSignOut = async () => {
-    localStorage.removeItem('phishguard_auth_token');
-    setUser(defaultGuestUser);
-    setDbUser(defaultGuestUser);
-    setUserStats(null);
-  };
 
   const saveCustomClerkKey = (newKey: string) => {
     const trimmed = newKey.trim();
@@ -313,13 +135,32 @@ const DirectAuthBridge: React.FC<{
     window.location.reload();
   };
 
+  const loginWithCredentials = async (): Promise<{ success: boolean; error?: string }> => {
+    setIsModalOpen(true);
+    return { success: false, error: 'Please configure your Clerk Publishable Key to sign in.' };
+  };
+
+  const loginWithGoogle = async (): Promise<{ success: boolean; error?: string }> => {
+    setIsModalOpen(true);
+    return { success: false, error: 'Please configure your Clerk Publishable Key for Google authentication.' };
+  };
+
+  const registerAccount = async (): Promise<{ success: boolean; error?: string }> => {
+    setIsModalOpen(true);
+    return { success: false, error: 'Please configure your Clerk Publishable Key to register accounts.' };
+  };
+
+  const updateUserProfile = async (): Promise<{ success: boolean; error?: string }> => {
+    return { success: false, error: 'Authentication required. Please sign in with Clerk.' };
+  };
+
   return (
     <AuthContext.Provider
       value={{
         user,
-        dbUser,
-        isLoggedIn: user.isLoggedIn,
-        isLoaded,
+        dbUser: user,
+        isLoggedIn: false,
+        isLoaded: true,
         isClerkConfigured: false,
         clerkKeyStatus,
         userStats,
@@ -334,7 +175,7 @@ const DirectAuthBridge: React.FC<{
         openSignIn: () => setIsModalOpen(true),
         openSignUp: () => setIsModalOpen(true),
         closeAuthModal: () => setIsModalOpen(false),
-        signOut: handleSignOut,
+        signOut: async () => {},
       }}
     >
       {children}
@@ -343,7 +184,8 @@ const DirectAuthBridge: React.FC<{
 };
 
 /**
- * Clerk Authentication Bridge (Active when a verified live Clerk key is provided)
+ * Clerk Authenticated Bridge: Active when genuine live Clerk key is detected.
+ * Uses official Clerk SDK session tokens for all requests and database sync.
  */
 const ClerkAuthBridge: React.FC<{
   children: ReactNode;
@@ -364,10 +206,10 @@ const ClerkAuthBridge: React.FC<{
       if (isSignedIn) {
         return await getToken();
       }
-      return localStorage.getItem('phishguard_auth_token');
+      return null;
     } catch (err) {
-      console.warn('[Clerk] Error fetching token:', err);
-      return localStorage.getItem('phishguard_auth_token');
+      console.warn('[Clerk] Error fetching session token:', err);
+      return null;
     }
   }, [isSignedIn, getToken]);
 
@@ -392,7 +234,6 @@ const ClerkAuthBridge: React.FC<{
         const serverUser = data.user;
         const stats = data.stats;
 
-        const effectiveEmail = (serverUser.email || clerkUser?.primaryEmailAddress?.emailAddress || '').toLowerCase();
         const isAdmin = 
           (serverUser.role || '').toLowerCase() === 'admin' ||
           serverUser.username === 'admin' ||
@@ -419,6 +260,9 @@ const ClerkAuthBridge: React.FC<{
         if (stats) {
           setUserStats(stats);
         }
+      } else {
+        setDbUser(defaultGuestUser);
+        setUserStats(null);
       }
     } catch (err) {
       console.warn('[Auth Sync] Error syncing user with database:', err);
@@ -433,79 +277,33 @@ const ClerkAuthBridge: React.FC<{
     }
   }, [isClerkUserLoaded, isSignedIn, clerkUser?.id, syncWithDatabase]);
 
-  const loginWithCredentials = async (username: string, password: string): Promise<{ success: boolean; error?: string }> => {
+  const loginWithCredentials = async (): Promise<{ success: boolean; error?: string }> => {
+    setIsModalOpen(true);
     try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        return { success: false, error: data.error || 'Authentication failed' };
-      }
-
-      localStorage.setItem('phishguard_auth_token', data.token);
-      await syncWithDatabase();
-      setIsModalOpen(false);
+      clerk.openSignIn({});
       return { success: true };
-    } catch (err: any) {
-      return { success: false, error: err.message || 'Network error during login.' };
+    } catch {
+      return { success: false, error: 'Could not open Clerk Sign In dialog.' };
     }
   };
 
-  const loginWithGoogle = async (email?: string, name?: string): Promise<{ success: boolean; error?: string }> => {
+  const loginWithGoogle = async (): Promise<{ success: boolean; error?: string }> => {
+    setIsModalOpen(true);
     try {
-      const res = await fetch('/api/auth/google/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: email || 'analyst@phishguard.security',
-          name: name || 'Security Analyst',
-          googleId: 'g-analyst-sso',
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        return { success: false, error: data.error || 'Google login failed' };
-      }
-
-      localStorage.setItem('phishguard_auth_token', data.token);
-      await syncWithDatabase();
-      setIsModalOpen(false);
+      clerk.openSignIn({});
       return { success: true };
-    } catch (err: any) {
-      return { success: false, error: err.message || 'Network error during Google login.' };
+    } catch {
+      return { success: false, error: 'Could not open Clerk Google authentication.' };
     }
   };
 
-  const registerAccount = async (payload: {
-    username: string;
-    email: string;
-    password: string;
-    firstName?: string;
-    lastName?: string;
-  }): Promise<{ success: boolean; error?: string }> => {
+  const registerAccount = async (): Promise<{ success: boolean; error?: string }> => {
+    setIsModalOpen(true);
     try {
-      const res = await fetch('/api/auth/direct-register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        return { success: false, error: data.error || 'Registration failed' };
-      }
-
-      localStorage.setItem('phishguard_auth_token', data.token);
-      await syncWithDatabase();
-      setIsModalOpen(false);
+      clerk.openSignUp({});
       return { success: true };
-    } catch (err: any) {
-      return { success: false, error: err.message || 'Network error during registration.' };
+    } catch {
+      return { success: false, error: 'Could not open Clerk Sign Up dialog.' };
     }
   };
 
@@ -556,7 +354,6 @@ const ClerkAuthBridge: React.FC<{
   };
 
   const handleSignOut = async () => {
-    localStorage.removeItem('phishguard_auth_token');
     try {
       if (isSignedIn) {
         await clerkSignOut();
@@ -578,7 +375,7 @@ const ClerkAuthBridge: React.FC<{
     window.location.reload();
   };
 
-  const isUserAuthenticated = Boolean(isSignedIn || dbUser.isLoggedIn);
+  const isUserAuthenticated = Boolean(isSignedIn && dbUser.isLoggedIn);
 
   return (
     <AuthContext.Provider
@@ -603,7 +400,7 @@ const ClerkAuthBridge: React.FC<{
           try {
             clerk.openSignIn({});
           } catch {
-            // Virtual routing fallback
+            // Fallback
           }
         },
         openSignUp: () => {
@@ -611,7 +408,7 @@ const ClerkAuthBridge: React.FC<{
           try {
             clerk.openSignUp({});
           } catch {
-            // Virtual routing fallback
+            // Fallback
           }
         },
         closeAuthModal: () => setIsModalOpen(false),
@@ -625,9 +422,7 @@ const ClerkAuthBridge: React.FC<{
 
 /**
  * Top-Level Application Authentication Provider
- * Intelligently validates Clerk configuration. If a live, valid Clerk key is detected,
- * mounts ClerkProvider. If missing or invalid/dummy (404), seamlessly falls back to
- * DirectAuthBridge without console noise or connection errors.
+ * Validates Clerk publishable key. Mounts ClerkProvider if valid, or DirectAuthBridge if setup needed.
  */
 export const AppAuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
