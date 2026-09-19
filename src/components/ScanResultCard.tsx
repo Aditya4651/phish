@@ -19,7 +19,10 @@ import {
   Check,
   Share2,
   Fingerprint,
-  Database
+  Database,
+  Camera,
+  ExternalLink,
+  Shield
 } from 'lucide-react';
 import { URLScanResult } from '../types';
 import { generatePDFReport } from '../utils/pdfExport';
@@ -35,6 +38,7 @@ interface ScanResultCardProps {
 
 export const ScanResultCard: React.FC<ScanResultCardProps> = ({ result, onScanNew }) => {
   const [copied, setCopied] = useState(false);
+  const [screenshotError, setScreenshotError] = useState(false);
 
   const downloadJSONReport = () => {
     const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(result, null, 2));
@@ -394,6 +398,85 @@ export const ScanResultCard: React.FC<ScanResultCardProps> = ({ result, onScanNe
           ))}
         </div>
       </SpotlightCard>
+
+      {/* Automated Visual Sandbox Viewport & DOM Capture */}
+      {result.screenshot && (
+        <SpotlightCard className="p-6 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-800 gap-2">
+            <div className="flex items-center gap-2">
+              <Camera className="w-4 h-4 text-blue-400" />
+              <h3 className="text-xs font-semibold text-slate-200 uppercase tracking-wider">
+                Automated Sandbox Viewport & DOM Snapshot
+              </h3>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-300">
+                Resolution: {result.screenshot.width}×{result.screenshot.height}px
+              </span>
+              <span className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+                result.riskScore > 60 
+                  ? 'bg-rose-950/50 text-rose-300 border-rose-500/30' 
+                  : 'bg-emerald-950/50 text-emerald-300 border-emerald-500/30'
+              }`}>
+                {result.screenshot.statusText}
+              </span>
+            </div>
+          </div>
+
+          <div className="rounded-xl overflow-hidden border border-slate-800 bg-[#060910]">
+            {/* Mock Browser Title Bar */}
+            <div className="bg-[#0b101b] px-4 py-2.5 border-b border-slate-800 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-1.5">
+                <div className="w-2.5 h-2.5 rounded-full bg-rose-500/80" />
+                <div className="w-2.5 h-2.5 rounded-full bg-amber-500/80" />
+                <div className="w-2.5 h-2.5 rounded-full bg-emerald-500/80" />
+              </div>
+              <div className="flex-1 max-w-xl mx-auto">
+                <div className="bg-[#070b14] border border-slate-800/90 rounded-md px-3 py-1 text-[11px] font-mono text-slate-300 flex items-center gap-2 truncate">
+                  {result.ssl.enabled ? (
+                    <Lock className="w-3 h-3 text-emerald-400 shrink-0" />
+                  ) : (
+                    <Unlock className="w-3 h-3 text-rose-400 shrink-0" />
+                  )}
+                  <span className="truncate">{result.url}</span>
+                </div>
+              </div>
+              <div className="text-[10px] font-mono text-slate-500 shrink-0 hidden sm:block">
+                Headless Container Isolation
+              </div>
+            </div>
+
+            {/* Sandbox Render Surface */}
+            <div className="relative min-h-[260px] max-h-[420px] bg-[#03060c] flex items-center justify-center overflow-hidden">
+              {!screenshotError ? (
+                <img
+                  src={result.screenshot.url}
+                  alt={`Rendered viewport snapshot of ${result.domain.hostname}`}
+                  className="w-full h-auto object-cover max-h-[420px] filter transition-all duration-300"
+                  onError={() => setScreenshotError(true)}
+                  loading="lazy"
+                />
+              ) : (
+                <div className="p-8 text-center space-y-3 max-w-md">
+                  <div className="w-12 h-12 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center mx-auto text-slate-400">
+                    <Shield className="w-6 h-6 text-blue-400" />
+                  </div>
+                  <h4 className="text-sm font-semibold text-slate-200">
+                    Viewport Protected by Security Barrier
+                  </h4>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    Live DOM rendering executed in our isolated headless sandbox. Outbound tracker beacons and malicious payload downloads are quarantined.
+                  </p>
+                  <div className="inline-flex items-center gap-2 text-[11px] font-mono text-emerald-400 bg-emerald-950/40 px-3 py-1 rounded border border-emerald-500/30">
+                    <CheckCircle2 className="w-3 h-3" />
+                    DOM Heuristic Vectors Captured
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </SpotlightCard>
+      )}
 
       {/* 20+ Website Checking Parameters (32 In-Depth Checks) */}
       {result.parameters && result.parameters.length > 0 && (

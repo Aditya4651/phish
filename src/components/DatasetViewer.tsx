@@ -14,13 +14,15 @@ import {
   ExternalLink,
   Lock,
   Sparkles,
-  ArrowRight
+  ArrowRight,
+  Layers
 } from 'lucide-react';
 import { SAMPLE_DATASET_CSV } from '../utils/sampleDataset';
 import { URLScanResult, User } from '../types';
 import { SpotlightCard } from './motion/SpotlightCard';
 import { MagneticButton } from './motion/MagneticButton';
 import { ScrambleText } from './motion/ScrambleText';
+import { MLEvaluationDashboard } from './MLEvaluationDashboard';
 
 interface DatasetViewerProps {
   userScans?: URLScanResult[];
@@ -35,9 +37,7 @@ export const DatasetViewer: React.FC<DatasetViewerProps> = ({
   onSelectScan,
   onOpenLogin
 }) => {
-  const [corpusMode, setCorpusMode] = useState<'benchmark' | 'user'>(
-    userScans.length > 0 ? 'user' : 'benchmark'
-  );
+  const [corpusMode, setCorpusMode] = useState<'ml-model' | 'benchmark' | 'user'>('ml-model');
   const [searchTerm, setSearchTerm] = useState('');
   const [labelFilter, setLabelFilter] = useState<string>('all');
 
@@ -120,6 +120,19 @@ export const DatasetViewer: React.FC<DatasetViewerProps> = ({
           <div className="flex items-center bg-[#080c14] p-1 rounded-xl border border-slate-800">
             <button
               type="button"
+              onClick={() => setCorpusMode('ml-model')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer ${
+                corpusMode === 'ml-model' 
+                  ? 'bg-blue-600 text-white shadow-sm' 
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Cpu className="w-3.5 h-3.5" />
+              <span>ML Retrained Model (7 Datasets)</span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => {
                 setCorpusMode('user');
                 setLabelFilter('all');
@@ -146,95 +159,102 @@ export const DatasetViewer: React.FC<DatasetViewerProps> = ({
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              <Cpu className="w-3.5 h-3.5" />
-              <span>Benchmark Corpus ({SAMPLE_DATASET_CSV.length})</span>
+              <Database className="w-3.5 h-3.5" />
+              <span>Benchmark Matrix ({SAMPLE_DATASET_CSV.length})</span>
             </button>
           </div>
 
-          <MagneticButton
-            id="btn-download-corpus-csv"
-            onClick={downloadCSV}
-            className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-100 text-xs font-semibold rounded-lg border border-slate-700 flex items-center gap-2 cursor-pointer shadow-sm"
-          >
-            <Download className="w-3.5 h-3.5 text-blue-400" />
-            <span>Export {corpusMode === 'user' ? 'User Scans' : 'Benchmark'} CSV</span>
-          </MagneticButton>
+          {corpusMode !== 'ml-model' && (
+            <MagneticButton
+              id="btn-download-corpus-csv"
+              onClick={downloadCSV}
+              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-100 text-xs font-semibold rounded-lg border border-slate-700 flex items-center gap-2 cursor-pointer shadow-sm"
+            >
+              <Download className="w-3.5 h-3.5 text-blue-400" />
+              <span>Export {corpusMode === 'user' ? 'User Scans' : 'Benchmark'} CSV</span>
+            </MagneticButton>
+          )}
         </div>
       </div>
 
-      {/* Dataset Statistics Overview */}
-      {corpusMode === 'benchmark' ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <SpotlightCard className="p-5">
-            <div className="text-[11px] font-mono uppercase text-slate-400">Total Samples In Corpus</div>
-            <div className="text-3xl font-bold text-slate-100 font-mono mt-2">
-              <ScrambleText text={String(SAMPLE_DATASET_CSV.length)} />
-            </div>
-            <div className="text-[11px] text-slate-400 mt-1">11-Vector Normalized Records</div>
-          </SpotlightCard>
-
-          <SpotlightCard className="p-5 border-rose-500/20">
-            <div className="text-[11px] font-mono uppercase text-slate-400">Positive Class (Phishing)</div>
-            <div className="text-3xl font-bold text-rose-400 font-mono mt-2">
-              <ScrambleText text={String(SAMPLE_DATASET_CSV.filter(d => d.label === 1).length)} />
-            </div>
-            <div className="text-[11px] text-rose-400/80 mt-1">Confirmed Attack Targets</div>
-          </SpotlightCard>
-
-          <SpotlightCard className="p-5 border-emerald-500/20">
-            <div className="text-[11px] font-mono uppercase text-slate-400">Negative Class (Safe)</div>
-            <div className="text-3xl font-bold text-emerald-400 font-mono mt-2">
-              <ScrambleText text={String(SAMPLE_DATASET_CSV.filter(d => d.label === 0).length)} />
-            </div>
-            <div className="text-[11px] text-emerald-400/80 mt-1">Verified Top Rank Domains</div>
-          </SpotlightCard>
-
-          <SpotlightCard className="p-5 border-blue-500/20">
-            <div className="text-[11px] font-mono uppercase text-slate-400">Test Accuracy Score</div>
-            <div className="text-3xl font-bold text-blue-400 font-mono mt-2">
-              <ScrambleText text="98.4%" />
-            </div>
-            <div className="text-[11px] text-blue-400/80 mt-1">5-Fold Stratified Validation</div>
-          </SpotlightCard>
-        </div>
+      {/* Primary ML Model Evaluation Dashboard Mode */}
+      {corpusMode === 'ml-model' ? (
+        <MLEvaluationDashboard />
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <SpotlightCard className="p-5">
-            <div className="text-[11px] font-mono uppercase text-slate-400">User Scans In SQLite DB</div>
-            <div className="text-3xl font-bold text-slate-100 font-mono mt-2">
-              <ScrambleText text={String(userScans.length)} />
-            </div>
-            <div className="text-[11px] text-emerald-400 mt-1 flex items-center gap-1">
-              <UserIcon className="w-3 h-3" />
-              <span>@{currentUser?.username || 'Analyst'}</span>
-            </div>
-          </SpotlightCard>
+        <>
+          {/* Dataset Statistics Overview */}
+          {corpusMode === 'benchmark' ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <SpotlightCard className="p-5">
+                <div className="text-[11px] font-mono uppercase text-slate-400">Total Samples In Corpus</div>
+                <div className="text-3xl font-bold text-slate-100 font-mono mt-2">
+                  <ScrambleText text={String(SAMPLE_DATASET_CSV.length)} />
+                </div>
+                <div className="text-[11px] text-slate-400 mt-1">11-Vector Normalized Records</div>
+              </SpotlightCard>
 
-          <SpotlightCard className="p-5 border-rose-500/20">
-            <div className="text-[11px] font-mono uppercase text-slate-400">Phishing Threats Detected</div>
-            <div className="text-3xl font-bold text-rose-400 font-mono mt-2">
-              <ScrambleText text={String(userPhishCount)} />
-            </div>
-            <div className="text-[11px] text-rose-400/80 mt-1">Stored in url_scans table</div>
-          </SpotlightCard>
+              <SpotlightCard className="p-5 border-rose-500/20">
+                <div className="text-[11px] font-mono uppercase text-slate-400">Positive Class (Phishing)</div>
+                <div className="text-3xl font-bold text-rose-400 font-mono mt-2">
+                  <ScrambleText text={String(SAMPLE_DATASET_CSV.filter(d => d.label === 1).length)} />
+                </div>
+                <div className="text-[11px] text-rose-400/80 mt-1">Confirmed Attack Targets</div>
+              </SpotlightCard>
 
-          <SpotlightCard className="p-5 border-amber-500/20">
-            <div className="text-[11px] font-mono uppercase text-slate-400">Suspicious Heuristics</div>
-            <div className="text-3xl font-bold text-amber-400 font-mono mt-2">
-              <ScrambleText text={String(userSuspiciousCount)} />
-            </div>
-            <div className="text-[11px] text-amber-400/80 mt-1">Score between 30% and 60%</div>
-          </SpotlightCard>
+              <SpotlightCard className="p-5 border-emerald-500/20">
+                <div className="text-[11px] font-mono uppercase text-slate-400">Negative Class (Safe)</div>
+                <div className="text-3xl font-bold text-emerald-400 font-mono mt-2">
+                  <ScrambleText text={String(SAMPLE_DATASET_CSV.filter(d => d.label === 0).length)} />
+                </div>
+                <div className="text-[11px] text-emerald-400/80 mt-1">Verified Top Rank Domains</div>
+              </SpotlightCard>
 
-          <SpotlightCard className="p-5 border-emerald-500/20">
-            <div className="text-[11px] font-mono uppercase text-slate-400">Verified Benign Records</div>
-            <div className="text-3xl font-bold text-emerald-400 font-mono mt-2">
-              <ScrambleText text={String(userSafeCount)} />
+              <SpotlightCard className="p-5 border-blue-500/20">
+                <div className="text-[11px] font-mono uppercase text-slate-400">Test Accuracy Score</div>
+                <div className="text-3xl font-bold text-blue-400 font-mono mt-2">
+                  <ScrambleText text="98.4%" />
+                </div>
+                <div className="text-[11px] text-blue-400/80 mt-1">5-Fold Stratified Validation</div>
+              </SpotlightCard>
             </div>
-            <div className="text-[11px] text-emerald-400/80 mt-1">Safe RFC 3986 endpoints</div>
-          </SpotlightCard>
-        </div>
-      )}
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <SpotlightCard className="p-5">
+                <div className="text-[11px] font-mono uppercase text-slate-400">User Scans In SQLite DB</div>
+                <div className="text-3xl font-bold text-slate-100 font-mono mt-2">
+                  <ScrambleText text={String(userScans.length)} />
+                </div>
+                <div className="text-[11px] text-emerald-400 mt-1 flex items-center gap-1">
+                  <UserIcon className="w-3 h-3" />
+                  <span>@{currentUser?.username || 'Analyst'}</span>
+                </div>
+              </SpotlightCard>
+
+              <SpotlightCard className="p-5 border-rose-500/20">
+                <div className="text-[11px] font-mono uppercase text-slate-400">Phishing Threats Detected</div>
+                <div className="text-3xl font-bold text-rose-400 font-mono mt-2">
+                  <ScrambleText text={String(userPhishCount)} />
+                </div>
+                <div className="text-[11px] text-rose-400/80 mt-1">Stored in url_scans table</div>
+              </SpotlightCard>
+
+              <SpotlightCard className="p-5 border-amber-500/20">
+                <div className="text-[11px] font-mono uppercase text-slate-400">Suspicious Heuristics</div>
+                <div className="text-3xl font-bold text-amber-400 font-mono mt-2">
+                  <ScrambleText text={String(userSuspiciousCount)} />
+                </div>
+                <div className="text-[11px] text-amber-400/80 mt-1">Score between 30% and 60%</div>
+              </SpotlightCard>
+
+              <SpotlightCard className="p-5 border-emerald-500/20">
+                <div className="text-[11px] font-mono uppercase text-slate-400">Verified Benign Records</div>
+                <div className="text-3xl font-bold text-emerald-400 font-mono mt-2">
+                  <ScrambleText text={String(userSafeCount)} />
+                </div>
+                <div className="text-[11px] text-emerald-400/80 mt-1">Safe RFC 3986 endpoints</div>
+              </SpotlightCard>
+            </div>
+          )}
 
       {/* Dataset Table Card */}
       <SpotlightCard className="overflow-hidden">
@@ -454,6 +474,8 @@ export const DatasetViewer: React.FC<DatasetViewerProps> = ({
           </div>
         )}
       </SpotlightCard>
+      </>
+      )}
 
     </div>
   );

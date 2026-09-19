@@ -127,6 +127,17 @@ export interface MLInfo {
   ensemble_weight?: string;
 }
 
+export interface ScreenshotInfo {
+  available: boolean;
+  url?: string;
+  status: 'captured' | 'unavailable' | 'sandboxed';
+  errorReason?: string;
+  capturedAt: string;
+  width?: number;
+  height?: number;
+  statusText?: string;
+}
+
 export interface URLScanResult {
   id: string;
   url: string;
@@ -150,6 +161,7 @@ export interface URLScanResult {
   reasons: string[];
   recommendations: string[];
   scannedBy?: string;
+  screenshot?: ScreenshotInfo;
 }
 
 export interface UserSession {
