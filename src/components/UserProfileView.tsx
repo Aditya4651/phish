@@ -347,10 +347,10 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
           </div>
           <div>
             <div className="font-semibold text-slate-200">
-              Single Source of Truth: Clerk & Relational SQLite
+              Database Persistence: Cloud SQL / Supabase PostgreSQL & SQLite
             </div>
             <div className="text-slate-400 text-[11px] font-mono">
-              External Identity: {dbUser?.clerkUserId || effectiveUser?.id || 'clerk_authenticated_user'}
+              External Identity: {dbUser?.clerkUserId || effectiveUser?.id || 'authenticated_analyst'} • Region: asia-southeast1
             </div>
           </div>
         </div>

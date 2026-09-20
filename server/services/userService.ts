@@ -113,8 +113,8 @@ export async function getOrCreateUser(identity: AuthenticatedClerkIdentity): Pro
 
   const newId = Number(insertResult.lastInsertRowid);
   const newlyCreated = await db.execute({
-    sql: 'SELECT * FROM users WHERE id = ? LIMIT 1;',
-    args: [newId],
+    sql: 'SELECT * FROM users WHERE id = ? OR clerk_user_id = ? LIMIT 1;',
+    args: [newId || -1, identity.clerkUserId],
   });
 
   return newlyCreated.rows[0] as unknown as UserRow;
@@ -409,8 +409,8 @@ export async function authenticateLocalUser(
 
     const newId = Number(insertRes.lastInsertRowid);
     const refreshed = await db.execute({
-      sql: 'SELECT * FROM users WHERE id = ?;',
-      args: [newId],
+      sql: 'SELECT * FROM users WHERE id = ? OR clerk_user_id = ? LIMIT 1;',
+      args: [newId || -1, clerkId],
     });
     user = refreshed.rows[0] as unknown as UserRow;
   } else {
@@ -481,8 +481,8 @@ export async function registerLocalUser(data: {
 
   const newId = Number(insertRes.lastInsertRowid);
   const refreshed = await db.execute({
-    sql: 'SELECT * FROM users WHERE id = ?;',
-    args: [newId],
+    sql: 'SELECT * FROM users WHERE id = ? OR clerk_user_id = ? LIMIT 1;',
+    args: [newId || -1, clerkId],
   });
   const user = refreshed.rows[0] as unknown as UserRow;
 

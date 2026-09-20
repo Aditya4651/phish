@@ -1,12 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useMemo } from 'react';
-import { ClerkProvider, useUser, useAuth, useClerk } from '@clerk/clerk-react';
+import { ClerkProvider, useUser, useAuth, useClerk, useSignIn, useSignUp } from '@clerk/clerk-react';
 import { User, UserDashboardStats } from '../types';
 
 const RAW_CLERK_KEY = 
   (typeof window !== 'undefined' && localStorage.getItem('phishguard_clerk_pub_key')) ||
   import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || 
   import.meta.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || 
-  '';
+  'pk_test_c2F2ZWQtZm93bC0xNjI3LmNsZXJrLmFjY291bnRzLmRldiQ';
 
 export function isLiveClerkKey(key?: string | null): boolean {
   if (!key || typeof key !== 'string') return false;
@@ -49,8 +49,9 @@ export interface AuthContextType {
     dateOfBirth?: string;
     profileImageUrl?: string;
   }) => Promise<{ success: boolean; error?: string }>;
-  loginWithCredentials: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  loginWithGoogle: (email?: string, name?: string) => Promise<{ success: boolean; error?: string }>;
+  loginWithCredentials: (username: string, password?: string) => Promise<{ success: boolean; error?: string }>;
+  loginWithGoogle: (mode?: 'signin' | 'signup') => Promise<{ success: boolean; error?: string }>;
+  loginWithGithub: (mode?: 'signin' | 'signup') => Promise<{ success: boolean; error?: string }>;
   registerAccount: (data: {
     username: string;
     email: string;
@@ -251,8 +252,12 @@ const DirectAuthBridge: React.FC<{
     }
   };
 
-  const loginWithGoogle = async (email?: string, name?: string): Promise<{ success: boolean; error?: string }> => {
-    return loginWithCredentials(email ? email.split('@')[0] : 'google_analyst');
+  const loginWithGoogle = async (mode?: 'signin' | 'signup'): Promise<{ success: boolean; error?: string }> => {
+    return loginWithCredentials('google_analyst');
+  };
+
+  const loginWithGithub = async (mode?: 'signin' | 'signup'): Promise<{ success: boolean; error?: string }> => {
+    return loginWithCredentials('github_analyst');
   };
 
   const registerAccount = async (data: {
@@ -368,6 +373,7 @@ const DirectAuthBridge: React.FC<{
         updateUserProfile,
         loginWithCredentials,
         loginWithGoogle,
+        loginWithGithub,
         registerAccount,
         saveCustomClerkKey,
         isAuthModalOpen: isModalOpen,
@@ -395,25 +401,42 @@ const ClerkAuthBridge: React.FC<{
   const { user: clerkUser, isLoaded: isClerkUserLoaded, isSignedIn } = useUser();
   const { getToken, signOut: clerkSignOut } = useAuth();
   const clerk = useClerk();
+  const { signIn, isLoaded: isSignInLoaded } = useSignIn();
+  const { signUp, isLoaded: isSignUpLoaded } = useSignUp();
 
   const [dbUser, setDbUser] = useState<User>(defaultGuestUser);
   const [userStats, setUserStats] = useState<UserDashboardStats | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [localToken, setLocalToken] = useState<string | null>(() => {
+    return typeof window !== 'undefined' ? localStorage.getItem('phishguard_auth_token') : null;
+  });
+  const [localUser, setLocalUser] = useState<User | null>(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const stored = localStorage.getItem('phishguard_auth_user');
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
+  });
 
   const getAuthToken = useCallback(async (): Promise<string | null> => {
     try {
       if (isSignedIn) {
         return await getToken();
       }
-      return null;
+      if (localToken) {
+        return localToken;
+      }
+      return typeof window !== 'undefined' ? localStorage.getItem('phishguard_auth_token') : null;
     } catch (err) {
       console.warn('[Clerk] Error fetching session token:', err);
-      return null;
+      return localToken;
     }
-  }, [isSignedIn, getToken]);
+  }, [isSignedIn, getToken, localToken]);
 
   const syncWithDatabase = useCallback(async () => {
-    if (!isSignedIn) {
+    if (!isSignedIn && !localToken) {
       setDbUser(defaultGuestUser);
       setUserStats(null);
       return;
@@ -442,7 +465,7 @@ const ClerkAuthBridge: React.FC<{
           serverUser.username === 'admin' ||
           clerkUser?.username === 'admin';
 
-        setDbUser({
+        const updated: User = {
           id: String(serverUser.id),
           clerkUserId: serverUser.clerk_user_id,
           username: serverUser.username || clerkUser?.username || 'Analyst',
@@ -458,7 +481,13 @@ const ClerkAuthBridge: React.FC<{
           createdAt: serverUser.created_at ? serverUser.created_at.split('T')[0] : new Date().toISOString().split('T')[0],
           lastLogin: serverUser.last_active_at || new Date().toISOString(),
           lastActive: serverUser.last_active_at || new Date().toISOString(),
-        });
+        };
+
+        setDbUser(updated);
+        if (localToken) {
+          setLocalUser(updated);
+          localStorage.setItem('phishguard_auth_user', JSON.stringify(updated));
+        }
 
         if (stats) {
           setUserStats(stats);
@@ -471,44 +500,156 @@ const ClerkAuthBridge: React.FC<{
     } finally {
       setIsSyncing(false);
     }
-  }, [getAuthToken, clerkUser, isSignedIn]);
+  }, [getAuthToken, clerkUser, isSignedIn, localToken]);
 
   useEffect(() => {
-    if (isClerkUserLoaded && isSignedIn) {
+    if ((isClerkUserLoaded && isSignedIn) || localToken) {
       syncWithDatabase();
-    } else if (isClerkUserLoaded && !isSignedIn) {
+    } else if (isClerkUserLoaded && !isSignedIn && !localToken) {
       setDbUser(defaultGuestUser);
       setUserStats(null);
     }
-  }, [isClerkUserLoaded, isSignedIn, clerkUser?.id, syncWithDatabase]);
+  }, [isClerkUserLoaded, isSignedIn, clerkUser?.id, localToken, syncWithDatabase]);
 
-  const loginWithCredentials = async (): Promise<{ success: boolean; error?: string }> => {
-    setIsModalOpen(true);
+  const loginWithCredentials = async (username: string, password?: string): Promise<{ success: boolean; error?: string }> => {
     try {
-      clerk.openSignIn({});
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({ error: 'Authentication failed' }));
+        return { success: false, error: errData.error || 'Invalid credentials' };
+      }
+
+      const data = await res.json();
+      const authenticatedUser: User = {
+        id: String(data.user.id),
+        clerkUserId: data.user.clerk_user_id,
+        username: data.user.username,
+        email: data.user.email,
+        role: data.user.role === 'admin' ? 'Admin' : 'Analyst',
+        firstName: data.user.first_name || 'Analyst',
+        lastName: data.user.last_name || 'User',
+        isLoggedIn: true,
+        accountStatus: 'Active',
+        verificationStatus: true,
+        createdAt: data.user.created_at || new Date().toISOString().split('T')[0],
+        lastActive: data.user.last_active_at || new Date().toISOString(),
+      };
+
+      setLocalUser(authenticatedUser);
+      setLocalToken(data.token);
+      setDbUser(authenticatedUser);
+      setUserStats(data.stats || null);
+      localStorage.setItem('phishguard_auth_token', data.token);
+      localStorage.setItem('phishguard_auth_user', JSON.stringify(authenticatedUser));
+      setIsModalOpen(false);
+
       return { success: true };
-    } catch {
-      return { success: false, error: 'Could not open Clerk Sign In dialog.' };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Could not complete login' };
     }
   };
 
-  const loginWithGoogle = async (): Promise<{ success: boolean; error?: string }> => {
+  const loginWithOAuth = async (
+    provider: 'oauth_google' | 'oauth_github',
+    mode: 'signin' | 'signup' = 'signin'
+  ): Promise<{ success: boolean; error?: string }> => {
     setIsModalOpen(true);
     try {
-      clerk.openSignIn({});
-      return { success: true };
-    } catch {
-      return { success: false, error: 'Could not open Clerk Google authentication.' };
+      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+      const redirectUrl = `${origin}/sso-callback`;
+      const redirectUrlComplete = typeof window !== 'undefined' ? window.location.href : '/';
+
+      if (mode === 'signup') {
+        if (signUp && isSignUpLoaded) {
+          await signUp.authenticateWithRedirect({
+            strategy: provider,
+            redirectUrl,
+            redirectUrlComplete,
+          });
+          return { success: true };
+        }
+        clerk.openSignUp({});
+        return { success: true };
+      } else {
+        if (signIn && isSignInLoaded) {
+          await signIn.authenticateWithRedirect({
+            strategy: provider,
+            redirectUrl,
+            redirectUrlComplete,
+          });
+          return { success: true };
+        }
+        clerk.openSignIn({});
+        return { success: true };
+      }
+    } catch (err: any) {
+      console.error(`[Clerk] ${provider} auth error:`, err);
+      return { 
+        success: false, 
+        error: err?.errors?.[0]?.message || err.message || `Could not authenticate with ${provider}.` 
+      };
     }
   };
 
-  const registerAccount = async (): Promise<{ success: boolean; error?: string }> => {
-    setIsModalOpen(true);
+  const loginWithGoogle = async (mode: 'signin' | 'signup' = 'signin'): Promise<{ success: boolean; error?: string }> => {
+    return loginWithOAuth('oauth_google', mode);
+  };
+
+  const loginWithGithub = async (mode: 'signin' | 'signup' = 'signin'): Promise<{ success: boolean; error?: string }> => {
+    return loginWithOAuth('oauth_github', mode);
+  };
+
+  const registerAccount = async (data: {
+    username: string;
+    email: string;
+    password: string;
+    firstName?: string;
+    lastName?: string;
+  }): Promise<{ success: boolean; error?: string }> => {
     try {
-      clerk.openSignUp({});
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({ error: 'Registration failed' }));
+        return { success: false, error: errData.error || 'Failed to create account' };
+      }
+
+      const resData = await res.json();
+      const registeredUser: User = {
+        id: String(resData.user.id),
+        clerkUserId: resData.user.clerk_user_id,
+        username: resData.user.username,
+        email: resData.user.email,
+        role: resData.user.role === 'admin' ? 'Admin' : 'Analyst',
+        firstName: resData.user.first_name || data.firstName || 'Analyst',
+        lastName: resData.user.last_name || data.lastName || 'User',
+        isLoggedIn: true,
+        accountStatus: 'Active',
+        verificationStatus: true,
+        createdAt: resData.user.created_at,
+        lastActive: resData.user.last_active_at,
+      };
+
+      setLocalUser(registeredUser);
+      setLocalToken(resData.token);
+      setDbUser(registeredUser);
+      setUserStats(resData.stats || null);
+      localStorage.setItem('phishguard_auth_token', resData.token);
+      localStorage.setItem('phishguard_auth_user', JSON.stringify(registeredUser));
+      setIsModalOpen(false);
+
       return { success: true };
-    } catch {
-      return { success: false, error: 'Could not open Clerk Sign Up dialog.' };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Network error registering account' };
     }
   };
 
@@ -566,6 +707,10 @@ const ClerkAuthBridge: React.FC<{
     } catch (err) {
       console.warn('Signout warning:', err);
     }
+    setLocalToken(null);
+    setLocalUser(null);
+    localStorage.removeItem('phishguard_auth_token');
+    localStorage.removeItem('phishguard_auth_user');
     setDbUser(defaultGuestUser);
     setUserStats(null);
   };
@@ -580,44 +725,52 @@ const ClerkAuthBridge: React.FC<{
     window.location.reload();
   };
 
-  // Derive effective user immediately from Clerk user + synced SQLite database user
+  // Derive effective user immediately from Clerk user OR locally authenticated user + synced database user
   const effectiveUser: User = useMemo(() => {
-    if (!isSignedIn) {
-      return defaultGuestUser;
+    if (isSignedIn) {
+      const primaryEmail = clerkUser?.primaryEmailAddress?.emailAddress || '';
+      const fallbackUsername = clerkUser?.username || (primaryEmail ? primaryEmail.split('@')[0] : 'Analyst');
+      const resolvedUsername = 
+        dbUser.isLoggedIn && dbUser.username && dbUser.username !== 'Guest Analyst'
+          ? dbUser.username
+          : fallbackUsername;
+
+      const isAdmin = 
+        (dbUser.role || '').toLowerCase() === 'admin' ||
+        resolvedUsername.toLowerCase() === 'admin' ||
+        clerkUser?.username?.toLowerCase() === 'admin';
+
+      return {
+        id: dbUser.isLoggedIn ? dbUser.id : (clerkUser?.id || 'usr-temp'),
+        clerkUserId: clerkUser?.id || dbUser.clerkUserId,
+        username: resolvedUsername,
+        firstName: dbUser.firstName || clerkUser?.firstName || '',
+        lastName: dbUser.lastName || clerkUser?.lastName || '',
+        email: dbUser.email || primaryEmail,
+        dateOfBirth: dbUser.dateOfBirth || '',
+        profileImage: dbUser.profileImage || clerkUser?.imageUrl,
+        role: isAdmin ? 'Admin' : (dbUser.role && dbUser.role !== 'Guest' ? dbUser.role : 'Free User'),
+        isLoggedIn: true,
+        accountStatus: 'Active',
+        verificationStatus: true,
+        createdAt: dbUser.createdAt || (clerkUser?.createdAt ? new Date(clerkUser.createdAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]),
+        lastLogin: dbUser.lastActive || new Date().toISOString(),
+        lastActive: dbUser.lastActive || new Date().toISOString(),
+      };
     }
 
-    const primaryEmail = clerkUser?.primaryEmailAddress?.emailAddress || '';
-    const fallbackUsername = clerkUser?.username || (primaryEmail ? primaryEmail.split('@')[0] : 'Analyst');
-    const resolvedUsername = 
-      dbUser.isLoggedIn && dbUser.username && dbUser.username !== 'Guest Analyst'
-        ? dbUser.username
-        : fallbackUsername;
+    if (localUser && localUser.isLoggedIn) {
+      return localUser;
+    }
 
-    const isAdmin = 
-      (dbUser.role || '').toLowerCase() === 'admin' ||
-      resolvedUsername.toLowerCase() === 'admin' ||
-      clerkUser?.username?.toLowerCase() === 'admin';
+    if (dbUser && dbUser.isLoggedIn) {
+      return dbUser;
+    }
 
-    return {
-      id: dbUser.isLoggedIn ? dbUser.id : (clerkUser?.id || 'usr-temp'),
-      clerkUserId: clerkUser?.id || dbUser.clerkUserId,
-      username: resolvedUsername,
-      firstName: dbUser.firstName || clerkUser?.firstName || '',
-      lastName: dbUser.lastName || clerkUser?.lastName || '',
-      email: dbUser.email || primaryEmail,
-      dateOfBirth: dbUser.dateOfBirth || '',
-      profileImage: dbUser.profileImage || clerkUser?.imageUrl,
-      role: isAdmin ? 'Admin' : (dbUser.role && dbUser.role !== 'Guest' ? dbUser.role : 'Free User'),
-      isLoggedIn: true,
-      accountStatus: 'Active',
-      verificationStatus: true,
-      createdAt: dbUser.createdAt || (clerkUser?.createdAt ? new Date(clerkUser.createdAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]),
-      lastLogin: dbUser.lastActive || new Date().toISOString(),
-      lastActive: dbUser.lastActive || new Date().toISOString(),
-    };
-  }, [isSignedIn, clerkUser, dbUser]);
+    return defaultGuestUser;
+  }, [isSignedIn, clerkUser, dbUser, localUser]);
 
-  const isUserAuthenticated = Boolean(isSignedIn);
+  const isUserAuthenticated = Boolean(isSignedIn || (localUser && localUser.isLoggedIn) || dbUser.isLoggedIn);
 
   return (
     <AuthContext.Provider
@@ -634,6 +787,7 @@ const ClerkAuthBridge: React.FC<{
         updateUserProfile,
         loginWithCredentials,
         loginWithGoogle,
+        loginWithGithub,
         registerAccount,
         saveCustomClerkKey,
         isAuthModalOpen: isModalOpen,

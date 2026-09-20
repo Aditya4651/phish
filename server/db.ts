@@ -1,24 +1,187 @@
+import { Pool } from 'pg';
 import { createClient, Client } from '@libsql/client';
 import path from 'path';
 import fs from 'fs';
 
+// 1. PostgreSQL (Cloud SQL Developer Edition / Supabase-compatible relational DB)
+let pgPoolInstance: Pool | null = null;
+
+export function getPgPool(): Pool | null {
+  if (!process.env.SQL_HOST || !process.env.SQL_USER) {
+    return null;
+  }
+  if (!pgPoolInstance) {
+    pgPoolInstance = new Pool({
+      host: process.env.SQL_HOST,
+      user: process.env.SQL_USER,
+      password: process.env.SQL_PASSWORD,
+      database: process.env.SQL_DB_NAME,
+      max: 10,
+      connectionTimeoutMillis: 15000,
+    });
+
+    pgPoolInstance.on('error', (err) => {
+      console.error('[CloudSQL PG] Unexpected pool client error:', err);
+    });
+  }
+  return pgPoolInstance;
+}
+
+// 2. Local fallback client
 const DB_DIR = path.join(process.cwd(), 'PhishingURLDetector');
 if (!fs.existsSync(DB_DIR)) {
   fs.mkdirSync(DB_DIR, { recursive: true });
 }
-
 const DB_FILE = path.join(DB_DIR, 'app_database.db');
-
-export const db: Client = createClient({
+const localDb: Client = createClient({
   url: `file:${DB_FILE}`,
 });
 
-export async function initDatabase(): Promise<void> {
-  // Enforce foreign key constraints
-  await db.execute('PRAGMA foreign_keys = ON;');
+export interface DatabaseExecutionResult {
+  rows: any[];
+  lastInsertRowid?: number | bigint;
+  rowsAffected?: number;
+}
 
-  // 1. Users Table (Clerk synchronized)
-  await db.execute(`
+/**
+ * Unified query executor that directs all queries directly to Cloud SQL PostgreSQL,
+ * falling back seamlessly to local database if SQL_HOST is unavailable.
+ */
+export async function executeQuery(query: { sql: string; args?: any[] } | string): Promise<DatabaseExecutionResult> {
+  const sqlStr = typeof query === 'string' ? query : query.sql;
+  const rawArgs = typeof query === 'string' ? [] : (query.args || []);
+  const pool = getPgPool();
+
+  if (pool) {
+    try {
+      // Convert SQLite parameter markers (?) to PostgreSQL positional markers ($1, $2...)
+      let paramIndex = 1;
+      let pgSql = sqlStr.replace(/\?/g, () => `$${paramIndex++}`);
+
+      // Handle SQLite PRAGMA gracefully
+      if (/^\s*PRAGMA/i.test(pgSql)) {
+        return { rows: [] };
+      }
+
+      // Handle INSERT OR IGNORE
+      if (/INSERT\s+OR\s+IGNORE\s+INTO/i.test(pgSql)) {
+        pgSql = pgSql.replace(/INSERT\s+OR\s+IGNORE\s+INTO/i, 'INSERT INTO');
+        if (!/ON\s+CONFLICT/i.test(pgSql)) {
+          pgSql = pgSql.trim().replace(/;$/, '') + ' ON CONFLICT DO NOTHING;';
+        }
+      }
+
+      // If INSERT query without RETURNING id, append RETURNING id
+      const isInsert = /^\s*INSERT\s+INTO/i.test(pgSql);
+      if (isInsert && !/RETURNING/i.test(pgSql)) {
+        pgSql = pgSql.trim().replace(/;$/, '') + ' RETURNING id;';
+      }
+
+      const res = await pool.query(pgSql, rawArgs);
+      const lastId = isInsert && res.rows.length > 0 && res.rows[0].id ? res.rows[0].id : undefined;
+
+      return {
+        rows: res.rows,
+        lastInsertRowid: lastId,
+        rowsAffected: res.rowCount ?? (res.rows ? res.rows.length : 0),
+      };
+    } catch (err: any) {
+      console.error('[CloudSQL PG] Query error:', err.message, 'SQL:', sqlStr);
+      throw err;
+    }
+  }
+
+  // Fallback to SQLite
+  const res = await localDb.execute(query);
+  return {
+    rows: res.rows,
+    lastInsertRowid: res.lastInsertRowid,
+    rowsAffected: res.rowsAffected,
+  };
+}
+
+export const db = {
+  execute: executeQuery,
+};
+
+export async function initDatabase(): Promise<void> {
+  const pool = getPgPool();
+  const now = new Date().toISOString();
+
+  if (pool) {
+    try {
+      // Create tables on PostgreSQL
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS users (
+          id SERIAL PRIMARY KEY,
+          clerk_user_id TEXT UNIQUE NOT NULL,
+          username TEXT,
+          first_name TEXT,
+          last_name TEXT,
+          email TEXT,
+          role TEXT DEFAULT 'analyst',
+          password_hash TEXT,
+          api_key TEXT,
+          date_of_birth TEXT,
+          profile_image_url TEXT,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+          last_active_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS sessions (
+          id SERIAL PRIMARY KEY,
+          token TEXT UNIQUE NOT NULL,
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+          expires_at TIMESTAMP WITH TIME ZONE NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS url_scans (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          url TEXT NOT NULL,
+          normalized_url TEXT NOT NULL,
+          scan_status TEXT NOT NULL,
+          risk_score DOUBLE PRECISION NOT NULL,
+          result TEXT NOT NULL,
+          detected_threats TEXT NOT NULL,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+          completed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_pg_users_clerk_id ON users(clerk_user_id);
+        CREATE INDEX IF NOT EXISTS idx_pg_sessions_token ON sessions(token);
+        CREATE INDEX IF NOT EXISTS idx_pg_scans_user_id ON url_scans(user_id);
+        CREATE INDEX IF NOT EXISTS idx_pg_scans_created_at ON url_scans(created_at DESC);
+      `);
+
+      // Seed Default Analyst & Admin accounts into Cloud SQL
+      await pool.query(`
+        INSERT INTO users (
+          id, clerk_user_id, username, first_name, last_name, email, role, created_at, updated_at, last_active_at
+        ) VALUES 
+          (1, 'usr_analyst_default', 'analyst', 'Security', 'Analyst', 'analyst@cybersec.org', 'analyst', NOW(), NOW(), NOW()),
+          (2, 'usr_admin_default', 'admin', 'Chief', 'SecOps', 'admin@phishguard.ai', 'admin', NOW(), NOW(), NOW())
+        ON CONFLICT (clerk_user_id) DO UPDATE SET 
+          username = EXCLUDED.username,
+          role = EXCLUDED.role,
+          last_active_at = NOW();
+      `);
+
+      // Adjust sequence so subsequent serial IDs start above 2
+      await pool.query(`SELECT setval('users_id_seq', (SELECT MAX(id) FROM users));`).catch(() => {});
+
+      console.log('[Database] Cloud SQL PostgreSQL database initialized and active in asia-southeast1.');
+      return;
+    } catch (pgErr) {
+      console.error('[Database] Cloud SQL PostgreSQL initialization error:', pgErr);
+    }
+  }
+
+  // SQLite fallback initialization
+  await localDb.execute('PRAGMA foreign_keys = ON;');
+  await localDb.execute(`
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       clerk_user_id TEXT UNIQUE NOT NULL,
@@ -35,29 +198,17 @@ export async function initDatabase(): Promise<void> {
     );
   `);
 
-  // Migrate existing users table if role column is missing
   try {
-    await db.execute("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'analyst';");
-  } catch {
-    // Column already exists
-  }
-
-  // Migrate api_key column if missing
+    await localDb.execute("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'analyst';");
+  } catch {}
   try {
-    await db.execute("ALTER TABLE users ADD COLUMN api_key TEXT;");
-  } catch {
-    // Column already exists
-  }
-
-  // Migrate password_hash column if missing
+    await localDb.execute("ALTER TABLE users ADD COLUMN api_key TEXT;");
+  } catch {}
   try {
-    await db.execute("ALTER TABLE users ADD COLUMN password_hash TEXT;");
-  } catch {
-    // Column already exists
-  }
+    await localDb.execute("ALTER TABLE users ADD COLUMN password_hash TEXT;");
+  } catch {}
 
-  // 2. Sessions Table for persistent multi-user authentication
-  await db.execute(`
+  await localDb.execute(`
     CREATE TABLE IF NOT EXISTS sessions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       token TEXT UNIQUE NOT NULL,
@@ -68,51 +219,10 @@ export async function initDatabase(): Promise<void> {
     );
   `);
 
-  await db.execute('CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token);');
-  await db.execute('CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);');
+  await localDb.execute('CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token);');
+  await localDb.execute('CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);');
 
-  // Seed default analyst and admin accounts if they do not exist
-  try {
-    const now = new Date().toISOString();
-    // Default Analyst Account
-    await db.execute({
-      sql: `
-        INSERT OR IGNORE INTO users (
-          id, clerk_user_id, username, first_name, last_name, email, role, created_at, updated_at, last_active_at
-        ) VALUES (
-          1, 'usr_analyst_default', 'analyst', 'Security', 'Analyst', 'analyst@cybersec.org', 'analyst', ?, ?, ?
-        );
-      `,
-      args: [now, now, now],
-    });
-
-    // Default Admin Account
-    await db.execute({
-      sql: `
-        INSERT OR IGNORE INTO users (
-          id, clerk_user_id, username, first_name, last_name, email, role, created_at, updated_at, last_active_at
-        ) VALUES (
-          2, 'usr_admin_default', 'admin', 'Chief', 'SecOps', 'admin@phishguard.ai', 'admin', ?, ?, ?
-        );
-      `,
-      args: [now, now, now],
-    });
-  } catch (seedErr) {
-    console.warn('[Database] Seed accounts initialization notice:', seedErr);
-  }
-
-  // Ensure known admin username has admin role
-  try {
-    await db.execute({
-      sql: "UPDATE users SET role = 'admin' WHERE LOWER(username) = 'admin';",
-      args: [],
-    });
-  } catch {
-    // Non-fatal
-  }
-
-  // 2. URL Scans Table (Relational with Foreign Key to users.id)
-  await db.execute(`
+  await localDb.execute(`
     CREATE TABLE IF NOT EXISTS url_scans (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
@@ -128,10 +238,7 @@ export async function initDatabase(): Promise<void> {
     );
   `);
 
-  // 3. Performance & Lookup Indexes
-  await db.execute('CREATE INDEX IF NOT EXISTS idx_users_clerk_id ON users(clerk_user_id);');
-  await db.execute('CREATE INDEX IF NOT EXISTS idx_scans_user_id ON url_scans(user_id);');
-  await db.execute('CREATE INDEX IF NOT EXISTS idx_scans_created_at ON url_scans(created_at DESC);');
-
-  console.log('[Database] Relational SQLite database initialized successfully at', DB_FILE);
+  await localDb.execute('CREATE INDEX IF NOT EXISTS idx_users_clerk_id ON users(clerk_user_id);');
+  await localDb.execute('CREATE INDEX IF NOT EXISTS idx_scans_user_id ON url_scans(user_id);');
+  await localDb.execute('CREATE INDEX IF NOT EXISTS idx_scans_created_at ON url_scans(created_at DESC);');
 }

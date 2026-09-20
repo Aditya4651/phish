@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AnimatePresence } from 'motion/react';
+import { AuthenticateWithRedirectCallback } from '@clerk/clerk-react';
 import { Navbar } from './components/Navbar';
 import { URLScanner } from './components/URLScanner';
 import { ScanResultCard } from './components/ScanResultCard';
@@ -268,6 +269,21 @@ export default function App() {
   const handleOpenAuth = () => {
     setIsLoginModalOpen(true);
   };
+
+  // Handle Clerk SSO callback for Google and GitHub OAuth
+  if (typeof window !== 'undefined' && window.location.pathname.startsWith('/sso-callback')) {
+    return (
+      <div className="min-h-screen bg-[#07090e] flex flex-col items-center justify-center text-slate-100 p-4">
+        <div className="w-10 h-10 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mb-4" />
+        <h2 className="text-base font-semibold text-white tracking-tight">Completing Clerk Authentication...</h2>
+        <p className="text-xs text-slate-400 mt-1 font-mono">Synchronizing Google / GitHub identity tokens</p>
+        <AuthenticateWithRedirectCallback 
+          signInForceRedirectUrl="/"
+          signUpForceRedirectUrl="/"
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#090a0f] text-slate-100 flex flex-col font-sans selection:bg-blue-600 selection:text-white">
