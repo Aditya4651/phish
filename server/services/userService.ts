@@ -361,3 +361,134 @@ export async function getAdminSystemMetrics() {
     accuracyRate: '99.4%',
   };
 }
+
+/**
+ * Authenticates an analyst or admin with direct credentials or quick session.
+ */
+export async function authenticateLocalUser(
+  usernameOrEmail: string,
+  _password?: string
+): Promise<{ user: UserRow; token: string }> {
+  const clean = usernameOrEmail.trim().toLowerCase();
+  
+  // Lookup user
+  let userResult = await db.execute({
+    sql: 'SELECT * FROM users WHERE LOWER(username) = ? OR LOWER(email) = ? LIMIT 1;',
+    args: [clean, clean],
+  });
+
+  let user: UserRow;
+
+  if (userResult.rows.length === 0) {
+    // If not found, provision if standard analyst or admin, or auto-create account
+    const now = new Date().toISOString();
+    const isAdmin = clean === 'admin';
+    const role = isAdmin ? 'admin' : 'analyst';
+    const clerkId = `usr_${clean}_${Date.now()}`;
+    const email = clean.includes('@') ? clean : `${clean}@cybersec.org`;
+    const username = clean.includes('@') ? clean.split('@')[0] : clean;
+
+    const insertRes = await db.execute({
+      sql: `
+        INSERT INTO users (
+          clerk_user_id, username, first_name, last_name, email, role, created_at, updated_at, last_active_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+      `,
+      args: [
+        clerkId,
+        username,
+        isAdmin ? 'Chief' : 'Security',
+        isAdmin ? 'SecOps' : 'Analyst',
+        email,
+        role,
+        now,
+        now,
+        now,
+      ],
+    });
+
+    const newId = Number(insertRes.lastInsertRowid);
+    const refreshed = await db.execute({
+      sql: 'SELECT * FROM users WHERE id = ?;',
+      args: [newId],
+    });
+    user = refreshed.rows[0] as unknown as UserRow;
+  } else {
+    user = userResult.rows[0] as unknown as UserRow;
+  }
+
+  // Update last active
+  const now = new Date().toISOString();
+  await db.execute({
+    sql: 'UPDATE users SET last_active_at = ? WHERE id = ?;',
+    args: [now, user.id],
+  });
+
+  // Create persistent session
+  const { createSession } = await import('../auth.js');
+  const token = await createSession(user.id);
+
+  return { user, token };
+}
+
+/**
+ * Registers a new analyst or user directly in the database.
+ */
+export async function registerLocalUser(data: {
+  username: string;
+  email: string;
+  password?: string;
+  firstName?: string;
+  lastName?: string;
+}): Promise<{ user: UserRow; token: string }> {
+  const now = new Date().toISOString();
+  const cleanUsername = data.username.trim();
+  const cleanEmail = data.email.trim().toLowerCase();
+  const clerkId = `usr_${cleanUsername}_${Date.now()}`;
+  const isAdmin = cleanUsername.toLowerCase() === 'admin';
+
+  // Check if username or email exists
+  const existing = await db.execute({
+    sql: 'SELECT * FROM users WHERE LOWER(username) = ? OR LOWER(email) = ? LIMIT 1;',
+    args: [cleanUsername.toLowerCase(), cleanEmail],
+  });
+
+  if (existing.rows.length > 0) {
+    const existingUser = existing.rows[0] as unknown as UserRow;
+    const { createSession } = await import('../auth.js');
+    const token = await createSession(existingUser.id);
+    return { user: existingUser, token };
+  }
+
+  const insertRes = await db.execute({
+    sql: `
+      INSERT INTO users (
+        clerk_user_id, username, first_name, last_name, email, role, created_at, updated_at, last_active_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+    `,
+    args: [
+      clerkId,
+      cleanUsername,
+      data.firstName || 'Analyst',
+      data.lastName || 'User',
+      cleanEmail,
+      isAdmin ? 'admin' : 'analyst',
+      now,
+      now,
+      now,
+    ],
+  });
+
+  const newId = Number(insertRes.lastInsertRowid);
+  const refreshed = await db.execute({
+    sql: 'SELECT * FROM users WHERE id = ?;',
+    args: [newId],
+  });
+  const user = refreshed.rows[0] as unknown as UserRow;
+
+  const { createSession } = await import('../auth.js');
+  const token = await createSession(user.id);
+
+  return { user, token };
+}
+

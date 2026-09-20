@@ -89,13 +89,39 @@ export default function App() {
       const headers: Record<string, string> = {};
       if (token) headers['Authorization'] = `Bearer ${token}`;
 
+      // If user is authenticated and has local scans, sync them to user's database
+      if (isLoggedIn && token && scanHistory.length > 0) {
+        try {
+          await fetch('/api/scans/sync', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({ scans: scanHistory }),
+          });
+        } catch (syncErr) {
+          console.warn('[App] Error syncing guest scans:', syncErr);
+        }
+      }
+
       const res = await fetch('/api/scans', { headers });
       if (res.ok) {
         const data = await res.json();
-        if (data && Array.isArray(data.scans)) {
-          setScanHistory(data.scans);
-        } else if (Array.isArray(data)) {
-          setScanHistory(data);
+        const serverScans = Array.isArray(data.scans) ? data.scans : (Array.isArray(data) ? data : []);
+        if (serverScans.length > 0) {
+          setScanHistory(prev => {
+            const map = new Map<string, URLScanResult>();
+            // Add server scans first
+            serverScans.forEach((s: URLScanResult) => map.set(s.id, s));
+            // Keep any recent local scans not yet in server list
+            prev.forEach(s => {
+              if (!map.has(s.id) && !serverScans.some((srv: URLScanResult) => srv.url === s.url)) {
+                map.set(s.id, s);
+              }
+            });
+            return Array.from(map.values());
+          });
         }
       }
     } catch (err) {
@@ -132,6 +158,7 @@ export default function App() {
           headers,
           body: JSON.stringify({
             url: result.url,
+            result: result,
             scannedBy: currentUser.username || 'Analyst',
           }),
         });
@@ -141,12 +168,58 @@ export default function App() {
           // Update record with server generated ID if provided
           if (saved && saved.id) {
             setCurrentScan(saved);
-            setScanHistory(prev => prev.map(s => s.id === result.id ? saved : s));
+            setScanHistory(prev => prev.map(s => (s.id === result.id || s.url === result.url) ? saved : s));
           }
         }
       } catch (err) {
         console.warn('Scan persistence error:', err);
       }
+    }
+  };
+
+  const handleSaveScan = async (scan: URLScanResult) => {
+    if (!isLoggedIn) {
+      addToast('Analyst Login Required', 'Please sign in to persist audit dossiers to your database.', 'warning');
+      setIsLoginModalOpen(true);
+      return;
+    }
+
+    try {
+      const token = await getAuthToken();
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const res = await fetch('/api/scan', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          url: scan.url,
+          result: scan,
+          scannedBy: currentUser.username || 'Analyst',
+        }),
+      });
+
+      if (res.ok) {
+        const saved = await res.json();
+        if (saved && saved.id) {
+          setCurrentScan(saved);
+          setScanHistory(prev => {
+            const exists = prev.some(s => s.id === saved.id || s.url === saved.url);
+            if (exists) {
+              return prev.map(s => (s.id === scan.id || s.url === saved.url) ? saved : s);
+            }
+            return [saved, ...prev];
+          });
+        }
+        addToast('Dossier Saved', 'Scan persisted to Intelligence & Audit Dossier database.', 'success');
+      } else {
+        addToast('Save Warning', 'Failed to save scan to database.', 'warning');
+      }
+    } catch (err) {
+      console.warn('Manual save error:', err);
+      addToast('Persistence Error', 'Could not save dossier to database.', 'warning');
     }
   };
 
@@ -221,6 +294,7 @@ export default function App() {
                 <ScanResultCard
                   result={currentScan}
                   onScanNew={() => setCurrentScan(null)}
+                  onSaveDossier={handleSaveScan}
                 />
               ) : (
                 <URLScanner

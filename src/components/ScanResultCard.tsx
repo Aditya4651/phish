@@ -22,7 +22,8 @@ import {
   Database,
   Camera,
   ExternalLink,
-  Shield
+  Shield,
+  Bookmark
 } from 'lucide-react';
 import { URLScanResult } from '../types';
 import { generatePDFReport } from '../utils/pdfExport';
@@ -34,10 +35,12 @@ import { WebsiteCheckParameters } from './WebsiteCheckParameters';
 interface ScanResultCardProps {
   result: URLScanResult;
   onScanNew: () => void;
+  onSaveDossier?: (result: URLScanResult) => void;
 }
 
-export const ScanResultCard: React.FC<ScanResultCardProps> = ({ result, onScanNew }) => {
+export const ScanResultCard: React.FC<ScanResultCardProps> = ({ result, onScanNew, onSaveDossier }) => {
   const [copied, setCopied] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
   const [screenshotError, setScreenshotError] = useState(false);
 
   const downloadJSONReport = () => {
@@ -106,6 +109,24 @@ export const ScanResultCard: React.FC<ScanResultCardProps> = ({ result, onScanNe
         </button>
 
         <div className="flex items-center gap-2">
+          {onSaveDossier && (
+            <MagneticButton
+              id="btn-save-dossier"
+              onClick={() => {
+                onSaveDossier(result);
+                setIsSaved(true);
+              }}
+              className={`px-3.5 py-2 text-xs font-medium rounded-lg flex items-center gap-1.5 transition-all cursor-pointer shadow-sm ${
+                isSaved 
+                  ? 'bg-emerald-600 hover:bg-emerald-500 text-white' 
+                  : 'bg-indigo-600 hover:bg-indigo-500 text-white'
+              }`}
+            >
+              {isSaved ? <Check className="w-3.5 h-3.5" /> : <Bookmark className="w-3.5 h-3.5" />}
+              <span>{isSaved ? 'Saved to Dossier' : 'Save to Dossier'}</span>
+            </MagneticButton>
+          )}
+
           <MagneticButton
             id="btn-pdf-export"
             onClick={() => generatePDFReport(result)}

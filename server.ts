@@ -15,6 +15,8 @@ import {
   updateUserRoleInDb,
   deleteUserInDb,
   getAdminSystemMetrics,
+  authenticateLocalUser,
+  registerLocalUser,
 } from './server/services/userService.js';
 import { createScan, getUserScans, getScanById, deleteUserScan, getUserStatistics } from './server/services/scanService.js';
 
@@ -162,21 +164,90 @@ app.get('/api/auth/me', async (req, res) => {
   try {
     const identity = await getAuthenticatedUser(req);
     if (!identity) {
-      return res.status(401).json({ error: 'Not authenticated or Clerk session token invalid/expired.' });
+      return res.status(401).json({ error: 'Not authenticated or session token invalid/expired.' });
     }
 
-    // Synchronize authenticated Clerk user with relational database
+    // Synchronize authenticated user with relational database
     const dbUser = await getOrCreateUser(identity);
     const stats = await getUserStatistics(dbUser.id, dbUser.username || 'Analyst');
 
     return res.json({
       user: dbUser,
       stats,
-      authenticatedVia: 'clerk',
+      authenticatedVia: 'session',
     });
   } catch (err: any) {
     console.error('Error in /api/auth/me:', err);
-    return res.status(500).json({ error: 'Internal server error verifying Clerk authentication.' });
+    return res.status(500).json({ error: 'Internal server error verifying authentication.' });
+  }
+});
+
+// 2a. AUTH: Direct Analyst / Admin Login
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { username, email, password } = req.body;
+    const target = (username || email || 'analyst').trim();
+    if (!target) {
+      return res.status(400).json({ error: 'Username or email is required.' });
+    }
+
+    const { user, token } = await authenticateLocalUser(target, password);
+    const stats = await getUserStatistics(user.id, user.username || 'Analyst');
+
+    logAudit(
+      user.username || 'user',
+      'LOGIN',
+      `Analyst session started for ${user.username} (Role: ${user.role || 'analyst'}).`,
+      req.ip || '127.0.0.1',
+      'INFO'
+    );
+
+    return res.json({
+      user,
+      token,
+      stats,
+      authenticatedVia: 'local_database',
+    });
+  } catch (err: any) {
+    console.error('Login error:', err);
+    return res.status(500).json({ error: 'Failed to authenticate user.' });
+  }
+});
+
+// 2b. AUTH: Direct Analyst Registration
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    const { username, email, password, firstName, lastName } = req.body;
+    if (!username || !email) {
+      return res.status(400).json({ error: 'Username and email are required.' });
+    }
+
+    const { user, token } = await registerLocalUser({
+      username,
+      email,
+      password,
+      firstName,
+      lastName,
+    });
+    const stats = await getUserStatistics(user.id, user.username || 'Analyst');
+
+    logAudit(
+      user.username || 'user',
+      'REGISTER',
+      `New analyst registered: ${user.username} (${user.email}).`,
+      req.ip || '127.0.0.1',
+      'INFO'
+    );
+
+    return res.json({
+      user,
+      token,
+      stats,
+      authenticatedVia: 'local_database',
+    });
+  } catch (err: any) {
+    console.error('Registration error:', err);
+    return res.status(500).json({ error: 'Failed to register account.' });
   }
 });
 
@@ -185,7 +256,7 @@ app.put('/api/user/profile', async (req, res) => {
   try {
     const identity = await getAuthenticatedUser(req);
     if (!identity) {
-      return res.status(401).json({ error: 'Unauthorized: Valid Clerk session required.' });
+      return res.status(401).json({ error: 'Unauthorized: Valid session required.' });
     }
 
     const dbUser = await getOrCreateUser(identity);
@@ -202,7 +273,7 @@ app.put('/api/user/profile', async (req, res) => {
     logAudit(
       updatedUser.username || 'user',
       'UPDATE_PROFILE',
-      'User profile updated in relational database and synced with Clerk.',
+      'User profile updated in relational database.',
       req.ip || '127.0.0.1',
       'INFO'
     );
@@ -219,7 +290,7 @@ app.post('/api/user/api-key', async (req, res) => {
   try {
     const identity = await getAuthenticatedUser(req);
     if (!identity) {
-      return res.status(401).json({ error: 'Unauthorized: Valid Clerk session required.' });
+      return res.status(401).json({ error: 'Unauthorized: Valid session required.' });
     }
 
     const dbUser = await getOrCreateUser(identity);
@@ -235,11 +306,13 @@ app.post('/api/user/api-key', async (req, res) => {
   }
 });
 
-// 5. SCAN: Execute URL Analysis (Persisted to Relational DB for Clerk Authenticated Users)
-app.post(['/api/scan', '/api/scans'], async (req, res) => {
-  const { url, scannedBy } = req.body;
+// 5. SCAN: Execute URL Analysis & Persistence to Relational DB
+app.post(['/api/scan', '/api/scans', '/api/scans/save'], async (req, res) => {
+  const { url, scannedBy, result: clientResult, scan: clientScan } = req.body;
+  const providedResult = clientResult || clientScan;
+  const targetUrl = url || providedResult?.url;
 
-  if (!url || typeof url !== 'string' || !url.trim()) {
+  if (!targetUrl || typeof targetUrl !== 'string' || !targetUrl.trim()) {
     return res.status(400).json({ error: 'A valid URL parameter is required for analysis.' });
   }
 
@@ -247,18 +320,22 @@ app.post(['/api/scan', '/api/scans'], async (req, res) => {
     const identity = await getAuthenticatedUser(req);
 
     if (identity) {
-      // Authenticated Clerk session:
-      // 1. Synchronize/retrieve local database user by clerk_user_id
+      // Authenticated session:
+      // 1. Synchronize/retrieve local database user
       const dbUser = await getOrCreateUser(identity);
-      // 2. Perform deep URL forensic analysis
-      const analysis = analyzeURL(url, dbUser.username || identity.username || 'Analyst');
+      
+      // 2. If client already analyzed with full parameters/screenshots, preserve it; otherwise analyze
+      const analysis: URLScanResult = providedResult && providedResult.url
+        ? { ...providedResult, scannedBy: dbUser.username || identity.username || 'Analyst' }
+        : analyzeURL(targetUrl, dbUser.username || identity.username || 'Analyst');
+
       // 3. Persist scan in relational SQLite database with user_id foreign key
-      const savedScan = await createScan(dbUser.id, url, analysis);
+      const savedScan = await createScan(dbUser.id, targetUrl, analysis);
 
       logAudit(
         dbUser.username || 'user',
         'SCAN_URL',
-        `Authenticated scan: ${url} -> ${savedScan.label} (${savedScan.riskScore}/100)`,
+        `Dossier saved: ${targetUrl} -> ${savedScan.label} (${savedScan.riskScore}/100)`,
         req.ip || '127.0.0.1',
         savedScan.riskScore > 60 ? 'WARN' : 'INFO'
       );
@@ -266,7 +343,9 @@ app.post(['/api/scan', '/api/scans'], async (req, res) => {
       return res.json(savedScan);
     } else {
       // Guest or unauthenticated inspection
-      const analysis = analyzeURL(url, scannedBy || 'Guest Analyst');
+      const analysis = providedResult && providedResult.url
+        ? providedResult
+        : analyzeURL(targetUrl, scannedBy || 'Guest Analyst');
       storage.scanHistory.unshift(analysis);
       if (storage.scanHistory.length > 200) storage.scanHistory.pop();
       saveStorage();
@@ -276,6 +355,74 @@ app.post(['/api/scan', '/api/scans'], async (req, res) => {
   } catch (err: any) {
     console.error('Scan execution error:', err);
     return res.status(500).json({ error: 'Failed to process URL scan analysis.' });
+  }
+});
+
+// 5b. SCANS: Batch Synchronize Unsaved Guest / Session Scans into User Database
+app.post(['/api/scans/sync', '/api/scans/batch'], async (req, res) => {
+  try {
+    const identity = await getAuthenticatedUser(req);
+    if (!identity) {
+      return res.status(401).json({ error: 'Authentication required to sync scans to database.' });
+    }
+
+    const dbUser = await getOrCreateUser(identity);
+    const { scans } = req.body;
+
+    if (!Array.isArray(scans) || scans.length === 0) {
+      const userScans = await getUserScans(dbUser.id, { limit: 50 });
+      const stats = await getUserStatistics(dbUser.id, dbUser.username || 'Analyst');
+      return res.json({ synced: 0, scans: userScans.scans, stats });
+    }
+
+    // Retrieve existing scans for user to avoid duplicate inserts
+    const existingScans = await getUserScans(dbUser.id, { limit: 200 });
+    const existingUrls = new Set(existingScans.scans.map(s => s.url.toLowerCase().trim()));
+
+    let syncedCount = 0;
+    for (const scan of scans) {
+      if (scan && scan.url && typeof scan.url === 'string') {
+        const cleanUrl = scan.url.toLowerCase().trim();
+        if (!existingUrls.has(cleanUrl)) {
+          const score = typeof scan.riskScore === 'number' ? scan.riskScore : 10;
+          const label = scan.label || (score > 60 ? 'Phishing' : score > 20 ? 'Suspicious' : 'Safe');
+          const analysis: URLScanResult = {
+            ...scan,
+            riskScore: score,
+            label,
+            scannedBy: dbUser.username || identity.username || 'Analyst',
+          };
+          await createScan(dbUser.id, scan.url, analysis);
+          existingUrls.add(cleanUrl);
+          syncedCount++;
+        }
+      }
+    }
+
+    try {
+      logAudit(
+        dbUser.username || 'user',
+        'SYNC_SCANS',
+        `Synchronized ${syncedCount} scan dossier(s) into database for ${dbUser.username}.`,
+        req.ip || '127.0.0.1',
+        'INFO'
+      );
+    } catch {
+      // Non-fatal
+    }
+
+    const updatedScans = await getUserScans(dbUser.id, { limit: 50 });
+    const stats = await getUserStatistics(dbUser.id, dbUser.username || 'Analyst');
+
+    return res.json({
+      synced: syncedCount,
+      scans: updatedScans.scans,
+      total: updatedScans.total,
+      stats,
+    });
+  } catch (err: any) {
+    console.error('Scan batch sync error:', err);
+    return res.status(500).json({ error: 'Failed to synchronize scans to database.' });
   }
 });
 

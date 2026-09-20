@@ -1,6 +1,6 @@
 export type RiskLevel = 'Safe' | 'Low Risk' | 'Medium Risk' | 'High Risk' | 'Critical';
 export type SecurityGrade = 'A+' | 'A' | 'B' | 'C' | 'D' | 'F';
-export type UserRole = 'Admin' | 'Moderator' | 'Premium User' | 'Free User' | 'Guest';
+export type UserRole = 'Admin' | 'Moderator' | 'Premium User' | 'Free User' | 'Guest' | 'Analyst';
 
 export type ParameterCategory = 
   | 'Lexical & URL Anatomy'
@@ -263,6 +263,7 @@ export interface AuditLog {
     | 'PASSWORD_RESET_REQ'
     | 'PASSWORD_RESET_EXEC'
     | 'GOOGLE_AUTH'
+    | 'SYNC_SCANS'
     | 'DELETE_ACCOUNT'
     | 'SESSION_TERMINATED';
   details: string;

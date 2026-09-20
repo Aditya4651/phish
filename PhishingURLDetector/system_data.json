@@ -1,138 +1,23 @@
 {
-  "users": [
-    {
-      "id": "usr-admin",
-      "username": "admin",
-      "email": "admin@phishguard.security",
-      "role": "Admin",
-      "firstName": "Administrator",
-      "lastName": "Analyst",
-      "isLoggedIn": true,
-      "accountStatus": "Active",
-      "verificationStatus": true,
-      "createdAt": "2026-01-01",
-      "lastLogin": "2026-09-16T14:41:51.022Z",
-      "profileImage": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=250",
-      "apiKey": "pk_live_sec_412e8778ce51cb9d5bf32333",
-      "salt": "5f9a51c70265ab711bc55b0cdc7e8b83",
-      "passwordHash": "293d5f7755213c36d2b1f49824e594de7a77e05ba8b1e93eaea0807070a052f3aacdfdd95c7c8e36654159fa124565e8fe749b684d27a0c244710c4cd0570ca8",
-      "failedAttempts": 0,
-      "googleLinked": true,
-      "googleId": "g-admin-sso"
-    },
-    {
-      "id": "usr-mod",
-      "username": "moderator",
-      "email": "mod@cybersec.org",
-      "role": "Moderator",
-      "isLoggedIn": false,
-      "accountStatus": "Active",
-      "verificationStatus": true,
-      "createdAt": "2026-02-15",
-      "lastLogin": "2026-09-16T14:24:59.307Z",
-      "apiKey": "pk_live_mod_dae4086cb23e2731a00fa667",
-      "salt": "90e7dc42b14f4b9829c37072a04aaf4e",
-      "passwordHash": "b8afbe10160408edd3321f3c4ea3d43f12fa6605cc399d9932c46f3d2a8bee37f9270ab4dd5a071dc23a03fbdc6837111137c21d67673ddb816d357d24c1e4bc",
-      "failedAttempts": 0,
-      "googleLinked": false
-    },
-    {
-      "id": "usr-prem",
-      "username": "premium_analyst",
-      "email": "analyst@enterprise.com",
-      "role": "Premium User",
-      "isLoggedIn": false,
-      "accountStatus": "Active",
-      "verificationStatus": true,
-      "createdAt": "2026-03-10",
-      "lastLogin": "2026-09-16T14:24:59.356Z",
-      "apiKey": "pk_live_prem_41e5a60b14c18ea61541ce73",
-      "salt": "c823c65b7101b9badf90dae2a761caf8",
-      "passwordHash": "180441b4705e343877aadad4ae8bc5c6ad498323ecc4c2c1c2e9a8836c82c794e9fe3d495d0c05f0d2b5fd06c70498cd8ae524c3f76c95e8ec7f1554c68574b8",
-      "failedAttempts": 0,
-      "googleLinked": false
-    }
-  ],
-  "sessions": [
-    {
-      "id": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJ1c3ItYWRtaW4iLCJ1c2VybmFtZSI6ImFkbWluIiwicm9sZSI6IkFkbWluIiwiZW1haWwiOiJnYWRnZWRndXJ1amkxMjNAZ21haWwuY29tIiwiZmlyc3ROYW1lIjoiQWRtaW5pc3RyYXRvciIsImxhc3ROYW1lIjoiQW5hbHlzdCIsInByb2ZpbGVJbWFnZSI6Imh0dHBzOi8vaW1hZ2VzLnVuc3BsYXNoLmNvbS9waG90by0xNTM1NzEzODc1MDAyLWQxZDBjZjM3N2ZkZT9hdXRvPWZvcm1hdCZmaXQ9Y3JvcCZxPTgwJnc9MjUwIiwiZXhwIjoxNzkwMTc0NTExLCJpYXQiOjE3ODk1Njk3MTF9.urzgoWGPE-kzsj8gq_XvYqtOp1_aBP1DBZrgYbRJdyI",
-      "deviceName": "admin",
-      "browser": "Chrome (Google Identity Services)",
-      "os": "Google SSO Gateway",
-      "ipAddress": "127.0.0.1",
-      "location": "Google OAuth Node",
-      "createdTime": "2026-09-16T14:41:51.022Z",
-      "lastActive": "2026-09-16T14:41:51.022Z",
-      "isCurrent": true
-    },
-    {
-      "id": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJ1c3ItYWRtaW4iLCJ1c2VybmFtZSI6ImFkbWluIiwicm9sZSI6IkFkbWluIiwiZW1haWwiOiJnYWRnZWRndXJ1amkxMjNAZ21haWwuY29tIiwiZmlyc3ROYW1lIjoiQWRtaW5pc3RyYXRvciIsImxhc3ROYW1lIjoiQW5hbHlzdCIsInByb2ZpbGVJbWFnZSI6Imh0dHBzOi8vaW1hZ2VzLnVuc3BsYXNoLmNvbS9waG90by0xNTM1NzEzODc1MDAyLWQxZDBjZjM3N2ZkZT9hdXRvPWZvcm1hdCZmaXQ9Y3JvcCZxPTgwJnc9MjUwIiwiZXhwIjoxNzkwMTc0NDgwLCJpYXQiOjE3ODk1Njk2ODB9.a3V2CRZ6gI6DI_OWbfCWmkSfc9__4vUbOEhTWa91CjM",
-      "deviceName": "admin",
-      "browser": "Mozilla/5.0",
-      "os": "Linux x86_64",
-      "ipAddress": "127.0.0.1",
-      "location": "Secured Portal Node",
-      "createdTime": "2026-09-16T14:41:20.552Z",
-      "lastActive": "2026-09-16T14:41:20.552Z",
-      "isCurrent": true
-    },
-    {
-      "id": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJ1c3ItYWRtaW4iLCJ1c2VybmFtZSI6ImFkbWluIiwicm9sZSI6IkFkbWluIiwiZW1haWwiOiJnYWRnZWRndXJ1amkxMjNAZ21haWwuY29tIiwiZmlyc3ROYW1lIjoiQWRtaW5pc3RyYXRvciIsImxhc3ROYW1lIjoiQW5hbHlzdCIsInByb2ZpbGVJbWFnZSI6Imh0dHBzOi8vaW1hZ2VzLnVuc3BsYXNoLmNvbS9waG90by0xNTM1NzEzODc1MDAyLWQxZDBjZjM3N2ZkZT9hdXRvPWZvcm1hdCZmaXQ9Y3JvcCZxPTgwJnc9MjUwIiwiZXhwIjoxNzkwMTc0Mzk1LCJpYXQiOjE3ODk1Njk1OTV9.vPZWqNlY8omfPgtdxdA_yxXic_qKI3QWhW2NntoUzBQ",
-      "deviceName": "admin",
-      "browser": "curl/7.88.1",
-      "os": "Linux x86_64",
-      "ipAddress": "127.0.0.1",
-      "location": "Secured Portal Node",
-      "createdTime": "2026-09-16T14:39:55.284Z",
-      "lastActive": "2026-09-16T14:39:55.284Z",
-      "isCurrent": true
-    },
-    {
-      "id": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJ1c3ItYWRtaW4iLCJ1c2VybmFtZSI6ImFkbWluIiwicm9sZSI6IkFkbWluIiwiZW1haWwiOiJnYWRnZWRndXJ1amkxMjNAZ21haWwuY29tIiwiZmlyc3ROYW1lIjoiQWRtaW5pc3RyYXRvciIsImxhc3ROYW1lIjoiQW5hbHlzdCIsInByb2ZpbGVJbWFnZSI6Imh0dHBzOi8vaW1hZ2VzLnVuc3BsYXNoLmNvbS9waG90by0xNTM1NzEzODc1MDAyLWQxZDBjZjM3N2ZkZT9hdXRvPWZvcm1hdCZmaXQ9Y3JvcCZxPTgwJnc9MjUwIiwiZXhwIjoxNzkwMTc0Mzg5LCJpYXQiOjE3ODk1Njk1ODl9.BiNCE8qNC2rb0qNAqaTqlhY9XB8dNdt1MQdvNNq9u64",
-      "deviceName": "admin",
-      "browser": "curl/7.88.1",
-      "os": "Linux x86_64",
-      "ipAddress": "127.0.0.1",
-      "location": "Secured Portal Node",
-      "createdTime": "2026-09-16T14:39:49.332Z",
-      "lastActive": "2026-09-16T14:39:49.332Z",
-      "isCurrent": true
-    },
-    {
-      "id": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJ1c3ItYWRtaW4iLCJ1c2VybmFtZSI6ImFkbWluIiwicm9sZSI6IkFkbWluIiwiZW1haWwiOiJnYWRnZWRndXJ1amkxMjNAZ21haWwuY29tIiwiZmlyc3ROYW1lIjoiQWRtaW5pc3RyYXRvciIsImxhc3ROYW1lIjoiQW5hbHlzdCIsInByb2ZpbGVJbWFnZSI6Imh0dHBzOi8vaW1hZ2VzLnVuc3BsYXNoLmNvbS9waG90by0xNTM1NzEzODc1MDAyLWQxZDBjZjM3N2ZkZT9hdXRvPWZvcm1hdCZmaXQ9Y3JvcCZxPTgwJnc9MjUwIiwiZXhwIjoxNzkwMTc0MDkzLCJpYXQiOjE3ODk1NjkyOTN9.7mzVgDTrfD26EWL0xow3spKQ7OABcRYwjr2A6B4k8rA",
-      "deviceName": "admin",
-      "browser": "Mozilla/5.0",
-      "os": "Linux x86_64",
-      "ipAddress": "127.0.0.1",
-      "location": "Secured Portal Node",
-      "createdTime": "2026-09-16T14:34:53.554Z",
-      "lastActive": "2026-09-16T14:34:53.554Z",
-      "isCurrent": true
-    },
-    {
-      "id": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJ1c3ItYWRtaW4iLCJ1c2VybmFtZSI6ImFkbWluIiwicm9sZSI6IkFkbWluIiwiZW1haWwiOiJnYWRnZWRndXJ1amkxMjNAZ21haWwuY29tIiwiZmlyc3ROYW1lIjoiQWRtaW5pc3RyYXRvciIsImxhc3ROYW1lIjoiQW5hbHlzdCIsInByb2ZpbGVJbWFnZSI6Imh0dHBzOi8vaW1hZ2VzLnVuc3BsYXNoLmNvbS9waG90by0xNTM1NzEzODc1MDAyLWQxZDBjZjM3N2ZkZT9hdXRvPWZvcm1hdCZmaXQ9Y3JvcCZxPTgwJnc9MjUwIiwiZXhwIjoxNzkwMTc0MDI4LCJpYXQiOjE3ODk1NjkyMjh9.7o6vqwHb4fzSi-PEqE_pr5Z0b_tjzhABPCmMe2WLKq8",
-      "deviceName": "admin",
-      "browser": "curl/7.88.1",
-      "os": "Linux x86_64",
-      "ipAddress": "127.0.0.1",
-      "location": "Secured Portal Node",
-      "createdTime": "2026-09-16T14:33:48.540Z",
-      "lastActive": "2026-09-16T14:33:48.540Z",
-      "isCurrent": true
-    },
-    {
-      "id": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJ1c3ItYWRtaW4iLCJ1c2VybmFtZSI6ImFkbWluIiwicm9sZSI6IkFkbWluIiwiZW1haWwiOiJnYWRnZWRndXJ1amkxMjNAZ21haWwuY29tIiwiZmlyc3ROYW1lIjoiQWRtaW5pc3RyYXRvciIsImxhc3ROYW1lIjoiQW5hbHlzdCIsInByb2ZpbGVJbWFnZSI6Imh0dHBzOi8vaW1hZ2VzLnVuc3BsYXNoLmNvbS9waG90by0xNTM1NzEzODc1MDAyLWQxZDBjZjM3N2ZkZT9hdXRvPWZvcm1hdCZmaXQ9Y3JvcCZxPTgwJnc9MjUwIiwiZXhwIjoxNzkwMTc0MDI1LCJpYXQiOjE3ODk1NjkyMjV9.iBB-BKF080iZ_SNhnthkAMR3HQ7l2SXJQ2T5S1R2KZ4",
-      "deviceName": "admin",
-      "browser": "Chrome (Google Identity Services)",
-      "os": "Google SSO Gateway",
-      "ipAddress": "127.0.0.1",
-      "location": "Google OAuth Node",
-      "createdTime": "2026-09-16T14:33:45.977Z",
-      "lastActive": "2026-09-16T14:33:45.977Z",
-      "isCurrent": true
-    }
-  ],
   "auditLogs": [
+    {
+      "id": "log-3j53ebt",
+      "timestamp": "2026-09-20T07:05:41.947Z",
+      "username": "analyst",
+      "eventType": "SYNC_SCANS",
+      "details": "Synchronized 1 scan dossier(s) into database for analyst.",
+      "ipAddress": "127.0.0.1",
+      "severity": "INFO"
+    },
+    {
+      "id": "log-k3emip0",
+      "timestamp": "2026-09-20T07:05:01.976Z",
+      "username": "analyst",
+      "eventType": "LOGIN",
+      "details": "Analyst session started for analyst (Role: analyst).",
+      "ipAddress": "127.0.0.1",
+      "severity": "INFO"
+    },
     {
       "id": "log-kzibhg6",
       "timestamp": "2026-09-16T14:41:51.022Z",
@@ -5883,38 +5768,6 @@
       "addedBy": "admin",
       "addedAt": "2026-01-01",
       "status": "Active"
-    }
-  ],
-  "refreshTokens": [
-    {
-      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJ1c3ItYWRtaW4iLCJleHAiOjE3OTAxNzQwMjgsImlhdCI6MTc4OTU2OTIyOH0.pWnIZubGmn5H9siLHMe1OT2n2AIeGegbMxp-1GsBZ_I",
-      "userId": "usr-admin",
-      "expires": 1790174028540,
-      "revoked": false
-    },
-    {
-      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJ1c3ItYWRtaW4iLCJleHAiOjE3OTAxNzQwOTMsImlhdCI6MTc4OTU2OTI5M30.f2bfQbQpNVeMRS37ajdxAIhz48r4NWlc0QCQhAhRAQU",
-      "userId": "usr-admin",
-      "expires": 1790174093554,
-      "revoked": false
-    },
-    {
-      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJ1c3ItYWRtaW4iLCJleHAiOjE3OTAxNzQzODksImlhdCI6MTc4OTU2OTU4OX0.ULneMWVCo6iDeDnbjeZ5XLPOQg-mlo5FJY4ePahcklY",
-      "userId": "usr-admin",
-      "expires": 1790174389332,
-      "revoked": false
-    },
-    {
-      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJ1c3ItYWRtaW4iLCJleHAiOjE3OTAxNzQzOTUsImlhdCI6MTc4OTU2OTU5NX0.ZSy-y1b3xbPR2uhqELKMSlywlpUne-hQg_w6GMIptDM",
-      "userId": "usr-admin",
-      "expires": 1790174395284,
-      "revoked": false
-    },
-    {
-      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJ1c3ItYWRtaW4iLCJleHAiOjE3OTAxNzQ0ODAsImlhdCI6MTc4OTU2OTY4MH0.iXWTBjB5LkMeqJdhU3StqoQN9nLuj0T3q1tEcg5dyY4",
-      "userId": "usr-admin",
-      "expires": 1790174480552,
-      "revoked": false
     }
   ]
 }

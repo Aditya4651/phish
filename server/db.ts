@@ -49,6 +49,58 @@ export async function initDatabase(): Promise<void> {
     // Column already exists
   }
 
+  // Migrate password_hash column if missing
+  try {
+    await db.execute("ALTER TABLE users ADD COLUMN password_hash TEXT;");
+  } catch {
+    // Column already exists
+  }
+
+  // 2. Sessions Table for persistent multi-user authentication
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS sessions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      token TEXT UNIQUE NOT NULL,
+      user_id INTEGER NOT NULL,
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+  `);
+
+  await db.execute('CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token);');
+  await db.execute('CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);');
+
+  // Seed default analyst and admin accounts if they do not exist
+  try {
+    const now = new Date().toISOString();
+    // Default Analyst Account
+    await db.execute({
+      sql: `
+        INSERT OR IGNORE INTO users (
+          id, clerk_user_id, username, first_name, last_name, email, role, created_at, updated_at, last_active_at
+        ) VALUES (
+          1, 'usr_analyst_default', 'analyst', 'Security', 'Analyst', 'analyst@cybersec.org', 'analyst', ?, ?, ?
+        );
+      `,
+      args: [now, now, now],
+    });
+
+    // Default Admin Account
+    await db.execute({
+      sql: `
+        INSERT OR IGNORE INTO users (
+          id, clerk_user_id, username, first_name, last_name, email, role, created_at, updated_at, last_active_at
+        ) VALUES (
+          2, 'usr_admin_default', 'admin', 'Chief', 'SecOps', 'admin@phishguard.ai', 'admin', ?, ?, ?
+        );
+      `,
+      args: [now, now, now],
+    });
+  } catch (seedErr) {
+    console.warn('[Database] Seed accounts initialization notice:', seedErr);
+  }
+
   // Ensure known admin username has admin role
   try {
     await db.execute({

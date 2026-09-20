@@ -1,13 +1,21 @@
-import jsPDF from 'jspdf';
+import { jsPDF } from 'jspdf';
 import { URLScanResult } from '../types';
 
-export function generatePDFReport(scan: URLScanResult) {
-  const doc = new jsPDF();
-  const pageWidth = doc.internal.pageSize.getWidth();
+export function generatePDFReport(scan: URLScanResult): boolean {
+  try {
+    // Instantiate jsPDF with safe fallback
+    const DocClass = typeof jsPDF === 'function' ? jsPDF : (jsPDF as any).default;
+    const doc = new DocClass({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4'
+    });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
 
-  // Header Background
-  doc.setFillColor(11, 19, 41);
-  doc.rect(0, 0, pageWidth, 40, 'F');
+    // Header Background
+    doc.setFillColor(11, 19, 41);
+    doc.rect(0, 0, pageWidth, 40, 'F');
 
   // Title
   doc.setTextColor(6, 182, 212); // Cyan
@@ -233,6 +241,11 @@ export function generatePDFReport(scan: URLScanResult) {
     doc.text('PhishGuard Comprehensive Heuristic Parameter Audit | Page 2 of 2', 14, doc.internal.pageSize.getHeight() - 10);
   }
 
-  // Save PDF
-  doc.save(`Phishing_Report_${scan.id}.pdf`);
+    // Save PDF
+    doc.save(`Phishing_Report_${scan.id || 'scan'}.pdf`);
+    return true;
+  } catch (error) {
+    console.error('[PDF Export] Failed to generate PDF report:', error);
+    return false;
+  }
 }

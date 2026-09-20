@@ -155,6 +155,9 @@ export async function createScan(
 
   const payloadString = JSON.stringify(analysisResult);
 
+  const safeRiskScore = typeof analysisResult.riskScore === 'number' ? analysisResult.riskScore : 10;
+  const safeLabel = analysisResult.label || (safeRiskScore > 60 ? 'Phishing' : safeRiskScore > 20 ? 'Suspicious' : 'Safe');
+
   const insertResult = await db.execute({
     sql: `
       INSERT INTO url_scans (
@@ -173,8 +176,8 @@ export async function createScan(
       userId,
       rawUrl,
       normalized,
-      analysisResult.riskScore,
-      analysisResult.label,
+      safeRiskScore,
+      safeLabel,
       payloadString,
       now,
       now,
